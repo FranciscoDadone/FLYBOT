@@ -2266,7 +2266,9 @@ it('reports a field the AIP itself does not publish, once its ficha has been imp
         ->not->toContain('Radioayudas')
         // Already imported, so the ficha no longer sends the reader off-app.
         ->not->toContain('MADHEL remite a la AIP')
-        ->toContain('Combustible, teléfono, horario, frecuencia y radioayudas según la AIP');
+        // And the attribution credits the AIP with the one line it gave,
+        // rather than with three it published nothing for.
+        ->toContain('_Frecuencia según la AIP._');
 });
 
 /**
@@ -2295,9 +2297,9 @@ it('lists the radio navigation aids of an aerodrome the AIP publishes them for',
 });
 
 /**
- * Only the ~40 aerodromes MADHEL delegates to the AIP are ever read for this:
- * MADHEL itself has never published a radio navigation aid for anybody. A
- * ficha built off MADHEL alone stays silent rather than claiming the place
+ * Only the ~50 aerodromes the AIP publishes an AD 2 for are ever read for
+ * this: MADHEL itself has never published a radio navigation aid for anybody.
+ * A ficha built off MADHEL alone stays silent rather than claiming the place
  * has none.
  */
 it('says nothing about radioayudas for an aerodrome no AIP ficha was read for', function () {
@@ -2330,6 +2332,62 @@ it('shows the fuel and telephone of an aerodrome MADHEL does publish them for', 
         ->toContain('4,5 km al este-sudeste de Arrecifes (Buenos Aires)')
         // Not delegated, so there is no AIP to send anybody to.
         ->not->toContain('ais.anac.gob.ar/aip');
+});
+
+/**
+ * Morón is the case in its other half: MADHEL publishes no fuel for it, and
+ * the AIP's AD 2 has listed AVGAS and JET A-1 all along. "Sin dato publicado
+ * en MADHEL" was true and still useless — the pump is there — so the AIP fills
+ * the line MADHEL left empty rather than the ficha reporting a gap it can
+ * close, and the attribution names what it filled.
+ */
+it('fills a service MADHEL leaves empty with the AIP ficha of an aerodrome it did not delegate', function () {
+    Airport::where('anac_code', 'CIF')->update([
+        'city_reference' => 'Arrecifes',
+        'elevation_m' => 43,
+        'is_aip_delegated' => false,
+        'details_updated_at' => now(),
+        'aip_fuel' => 'AVGAS 100 LL / JET A-1.',
+        'aip_service_schedule' => '11:00 HR a SS',
+        'aip_details_updated_at' => now(),
+    ]);
+
+    expect(bot()->reply('info cif')->messages[0])
+        ->toContain('⛽ Combustible: AVGAS 100 LL / JET A-1.')
+        ->toContain('🕐 Horario: 11:00 HR a SS')
+        // Neither registry publishes a telephone, and the line says so about
+        // both rather than blaming the one that was asked first.
+        ->toContain('☎️ Teléfono: sin dato publicado en MADHEL ni en la AIP')
+        ->toContain('_Combustible y horario según la AIP._');
+});
+
+/**
+ * The other half of the same aerodrome: the frequency and the radio aids have
+ * no MADHEL equivalent at all — MADHEL publishes neither for anybody — so
+ * there is no registry silence for these two to contradict.
+ */
+it('shows the AIP frequency and radioayudas of an aerodrome MADHEL did not delegate', function () {
+    Airport::where('anac_code', 'CIF')->update([
+        'city_reference' => 'Arrecifes',
+        'elevation_m' => 43,
+        'fuel' => 'AVGAS 100LL',
+        'is_aip_delegated' => false,
+        'details_updated_at' => now(),
+        'aip_ats_frequency' => 'TWR Morón Torre — 118.50 MHz (CPPL)',
+        'aip_navaids' => [
+            ['type' => 'VOR/DME', 'id' => 'MOR', 'frequency' => '114.9', 'unit' => 'MHz', 'hours' => 'H24'],
+        ],
+        'aip_details_updated_at' => now(),
+    ]);
+
+    expect(bot()->reply('info cif')->messages[0])
+        ->toContain('📻 Frecuencia: TWR Morón Torre — 118.50 MHz (CPPL)')
+        ->toContain('📡 VOR/DME MOR — 114.9 MHz (H24)')
+        // Fuel is still MADHEL's on a ficha this source only lent two lines to,
+        // and the attribution says only what it lent.
+        ->toContain('⛽ Combustible: AVGAS 100LL')
+        ->toContain('_Frecuencia y radioayudas según la AIP._')
+        ->not->toContain('Combustible, teléfono, horario, frecuencia');
 });
 
 /**

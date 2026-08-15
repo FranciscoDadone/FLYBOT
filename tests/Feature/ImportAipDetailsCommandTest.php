@@ -43,11 +43,11 @@ it('imports the AIP ficha of an aerodrome delegated to it', function () {
 });
 
 /**
- * CIF is not delegated to the AIP — MADHEL already publishes its fuel and
- * telephone directly — so it must never enter the query this command walks,
- * regardless of what the AIP itself happens to publish for it.
+ * CIF has no ICAO code, and the AIP indexes its fichas by nothing else, so
+ * there is no document to read for it and its AIP columns must stay null —
+ * the same skip a delegated aerodrome with no document gets.
  */
-it('leaves an aerodrome that is not delegated to the AIP untouched', function () {
+it('leaves an aerodrome the AIP publishes no ficha for untouched', function () {
     fakeAipDocuments(['OSA']);
 
     $this->artisan('notams:import-aip-details')->assertSuccessful();
@@ -115,8 +115,25 @@ it('leaves the columns the other imports own alone', function () {
         ->and($airport->elevation_m)->toBe(192);
 });
 
-it('says so rather than failing when there are no aerodromes delegated to the AIP', function () {
-    Airport::query()->update(['is_aip_delegated' => false]);
+/**
+ * Morón (SADM) is not delegated — MADHEL publishes its fuel and telephone
+ * itself — and the AIP still publishes an AD 2 for it carrying the tower
+ * frequency and the radio aids, which nothing else does. Reading it is the
+ * whole point of walking documents rather than the delegation flag; EZE
+ * stands in for it here.
+ */
+it('imports the AIP ficha of an aerodrome that is not delegated but has an AD 2 document', function () {
+    Airport::where('anac_code', 'EZE')->update(['is_aip_delegated' => false]);
+    fakeAipDocuments(['EZE']);
+
+    $this->artisan('notams:import-aip-details')->assertSuccessful();
+
+    expect(Airport::where('anac_code', 'EZE')->value('aip_ats_frequency'))
+        ->toBe('TWR/APP SANTA ROSA TORRE — 118.30 MHz (CPPL) · 119.70 MHz (CAUX)');
+});
+
+it('says so rather than failing when the registry has no aerodrome the AIP publishes a ficha for', function () {
+    Airport::query()->update(['is_aip_delegated' => false, 'icao_code' => null]);
     fakeAipDocuments(['OSA']);
 
     $this->artisan('notams:import-aip-details')

@@ -108,10 +108,17 @@ final class AipAdDetails
             return null;
         }
 
+        // A short schedule is translated word by word inside the same
+        // sentence — Morón's "11:00 HR a / to SS" is one span of hours, not a
+        // Spanish half followed by an English one — so those pairs collapse
+        // before the sentence is split, or the cut below would leave the
+        // schedule hanging at "11:00 HR a".
+        $inline = preg_replace('/\s\/\s*(?:to|from|and|or)\b/u', '', $m[1]) ?? $m[1];
+
         // Spanish, then " /" (a space before it is the only reliable tell,
         // since the sentence itself is free to contain slashes) and the
         // English translation of the same hours.
-        $spanish = preg_split('/\s\/\s*/u', $m[1], 2)[0];
+        $spanish = preg_split('/\s\/\s*/u', $inline, 2)[0];
 
         return self::published($spanish);
     }
@@ -168,7 +175,9 @@ final class AipAdDetails
         $frequencies = [];
 
         foreach ($channels as $channel) {
-            if ($channel[1] === 'EMERG') {
+            // Spelled both ways across the AIP's own PDFs — EMERG at Santa
+            // Rosa, EMRG at Río Cuarto — and it is the same 121.5 either way.
+            if (in_array($channel[1], ['EMERG', 'EMRG'], true)) {
                 continue;
             }
 
@@ -217,9 +226,34 @@ final class AipAdDetails
 
         // Stop at the first channel code or frequency, whichever text
         // immediately follows the call sign in that aerodrome's PDF.
-        $rest = preg_split('/\s+(?:CPPL|CAUX|EMERG|\d{3}\.\d{2}\s*MHz)/u', $rest, 2)[0];
+        $rest = preg_split('/\s+(?:CPPL|CAUX|EMERG|EMRG|\d{3}\.\d{2}\s*MHz)/u', $rest, 2)[0];
 
-        return trim($rest);
+        return self::withoutTranslation(trim($rest));
+    }
+
+    /**
+     * "Morón Torre Morón Tower" back down to "Morón Torre".
+     *
+     * Some PDFs put the two languages on separate lines of the same cell with
+     * no slash between them for explode() above to cut at — Morón and Jujuy
+     * do — and the place name opening the English half is what gives it away.
+     * The name repeating is the tell rather than the English word for tower,
+     * since "Control" is spelled the same in both and cutting at it would take
+     * the Spanish call sign with it.
+     */
+    private static function withoutTranslation(string $callsign): string
+    {
+        $words = preg_split('/\s+/u', $callsign) ?: [];
+
+        if (count($words) < 4) {
+            return $callsign;
+        }
+
+        $repeat = array_search($words[0], array_slice($words, 1), true);
+
+        return $repeat === false
+            ? $callsign
+            : implode(' ', array_slice($words, 0, $repeat + 1));
     }
 
     /**

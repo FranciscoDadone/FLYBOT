@@ -145,6 +145,31 @@ it('survives a row label capitalised differently and a three-part ATS designatio
         ->and($details['ats_frequency'])->toBe('TMA/APP/TWR Bariloche Torre — 119.10 MHz (CPPL) · 118.65 MHz (CAUX)');
 });
 
+/**
+ * Morón writes the two languages of the call sign on separate lines of the
+ * same cell with no slash between them, so the cut that works everywhere else
+ * leaves "Morón Torre Morón Tower" behind. Its AD 2.19 is NIL, which is a
+ * table saying this aerodrome has no aids — not a parse that found none.
+ */
+it('reads a call sign whose English half is not separated by a slash', function () {
+    $details = AipAdDetails::parse(aipAdTextFixture('MOR'));
+
+    expect($details['ats_frequency'])->toBe('TWR Morón Torre — 118.50 MHz (CPPL) · 120.75 MHz (CAUX)')
+        ->and($details['navaids'])->toBeNull();
+});
+
+/**
+ * 121.5 is the distress frequency every aerodrome in the world guards, so it
+ * says nothing about this one — and the AIP spells its channel both ways.
+ */
+it('leaves the emergency channel out however the AIP abbreviates it', function () {
+    $text = 'ATS COMMUNICATION FACILITIES 1 2 3 4 5 6 TWR RÍO CUARTO TORRE CPPL 118.75 MHz '
+        .'CAUX 119.55 MHz EMRG 121.50 MHz HJ NIL AD 2.19';
+
+    expect(AipAdDetails::parse($text)['ats_frequency'])
+        ->toBe('TWR RÍO CUARTO TORRE — 118.75 MHz (CPPL) · 119.55 MHz (CAUX)');
+});
+
 it('treats NIL and a bare No as nothing published', function () {
     $text = 'Tipos de combustible, lubricantes / Fuel and oil types NIL 3 Instalaciones y capacidad de abastecimiento de combustible / Fuelling facilities and capacity NIL '
         .'1 Explotador del AD / AD Operator No 2 Aduanas / Customs No (O/R)';

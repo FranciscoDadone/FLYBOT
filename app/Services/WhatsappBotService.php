@@ -30,6 +30,7 @@ use App\Support\RunwayWind;
 use App\Support\SunCityResolver;
 use App\Support\SurfaceWind;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -1576,15 +1577,21 @@ class WhatsappBotService
             $lines = array_merge($lines, $this->sunLines($sun));
         }
 
-        if ($airport->is_aip_delegated) {
+        if ($airport->is_aip_delegated && $airport->aip_details_updated_at === null) {
+            // Delegated and not imported yet: nothing above came from the AIP,
+            // so the reader is sent to it rather than credited to it.
             $lines[] = '';
-            // Once notams:import-aip-details has actually read that record,
-            // pointing the reader at the AIP themselves is redundant with the
-            // lines above, which already come from it — a short attribution
-            // says so instead of sending them to fetch what they just read.
-            $lines[] = $airport->aip_details_updated_at === null
-                ? '_MADHEL remite a la AIP para este aeródromo: ais.anac.gob.ar/aip_'
-                : '_Combustible, teléfono, horario, frecuencia y radioayudas según la AIP._';
+            $lines[] = '_MADHEL remite a la AIP para este aeródromo: ais.anac.gob.ar/aip_';
+        } elseif (($credited = $this->aipCreditedFields($airport, $navaids)) !== []) {
+            // Once the AIP record has been read, pointing the reader at it is
+            // redundant with the lines above, which already come from it — a
+            // short attribution says so instead of sending them to fetch what
+            // they just read. It names the fields it actually gave, which on a
+            // ficha whose other lines are MADHEL's is the only way to read it:
+            // Morón's combustible and frecuencia are the AIP's, its ubicación
+            // and pistas are not.
+            $lines[] = '';
+            $lines[] = '_'.Str::ucfirst(Arr::join($credited, ', ', ' y ')).' según la AIP._';
         }
 
         return WhatsappReply::ofMany(
@@ -1872,75 +1879,140 @@ class WhatsappBotService
      */
     protected function airportServiceLines(Airport $airport): array
     {
-        if ($airport->is_aip_delegated) {
-            return $this->aipServiceLines($airport);
+        $fuel = $this->serviceField($airport, 'fuel');
+        $telephone = $this->serviceField($airport, 'telephone');
+        $schedule = $this->serviceField($airport, 'service_schedule');
+
+        $sources = $this->serviceSheetsRead($airport);
+
+        if ($sources === [] && $fuel === null && $telephone === null && $schedule === null) {
+            // Never asked either registry about this one. Saying "sin dato
+            // publicado" here would be reporting our own gap as theirs.
+            return [$airport->is_aip_delegated
+                ? '_Todavía no importé la ficha de la AIP de este aeródromo._'
+                : '_Todavía no importé la ficha de MADHEL de este aeródromo (notams:import-airport-details)._'];
         }
 
-        if ($airport->details_updated_at === null) {
-            // Never asked MADHEL about this one. Saying "sin dato publicado"
-            // here would be reporting our own gap as the registry's.
-            return ['_Todavía no importé la ficha de MADHEL de este aeródromo (notams:import-airport-details)._'];
-        }
-
-        return $this->madhelServiceLines($airport);
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    protected function madhelServiceLines(Airport $airport): array
-    {
-        $unpublished = 'sin dato publicado en MADHEL';
+        // Named after every sheet that was actually read, which is the only
+        // form of the sentence that stays true once two of them can answer:
+        // "sin dato publicado en MADHEL" under a ficha whose fuel came off the
+        // AIP would leave a reader wondering which one to believe.
+        //
+        // Nothing read and a line to print anyway is the delegated aerodrome
+        // whose AIP import has not run and whose MADHEL block was filled in
+        // regardless — those values are MADHEL's, and so is any gap beside
+        // them.
+        $unpublished = 'sin dato publicado en '.implode(' ni en ', $sources === [] ? ['MADHEL'] : $sources);
 
         $lines = [
-            '⛽ Combustible: '.($airport->fuel ?? $unpublished),
-            '☎️ Teléfono: '.($airport->telephone === null ? $unpublished : implode(' · ', $airport->telephone)),
+            '⛽ Combustible: '.($fuel['value'] ?? $unpublished),
+            '☎️ Teléfono: '.($telephone === null ? $unpublished : implode(' · ', $telephone['value'])),
         ];
 
-        if ($airport->service_schedule !== null) {
-            $lines[] = "🕐 Horario: {$airport->service_schedule}";
+        if ($schedule !== null) {
+            $lines[] = "🕐 Horario: {$schedule['value']}";
         }
 
-        return $lines;
+        return array_merge($lines, $this->atsFrequencyLines($airport));
     }
 
     /**
-     * Same three lines as airportServiceLines(), sourced from the AIP instead
-     * of MADHEL, plus a fourth MADHEL never had for anyone: the tower/approach
-     * frequency, from notams:import-aip-details.
+     * One service field off whichever registry publishes it, and which one
+     * that was.
      *
-     * @return array<int, string>
+     * Both are asked, in the order the aerodrome's own delegation sets: an
+     * aerodrome MADHEL delegates reads the AIP first and falls back to MADHEL
+     * for what it kept publishing anyway — General Pico (GPI) is delegated and
+     * still carries its own fuel — and one MADHEL did not delegate reads
+     * MADHEL first and falls back to the AIP, which is where Morón's
+     * combustible has been all along while its ficha said "sin dato publicado
+     * en MADHEL".
+     *
+     * Falling back rather than overwriting is what keeps the two disjoint: the
+     * import writes each source into its own columns (see
+     * …_add_aip_details_to_airports_table), and only the reading is merged.
+     *
+     * @return array{value: mixed, source: string}|null
      */
-    protected function aipServiceLines(Airport $airport): array
+    protected function serviceField(Airport $airport, string $field): ?array
     {
-        if ($airport->aip_details_updated_at === null) {
-            // is_aip_delegated marks MADHEL's own grant to the AIP, not a
-            // promise that MADHEL's block is empty — General Pico (GPI) is
-            // delegated and still carries its own fuel, telephone and hours.
-            // Until the AIP import has run, that is better than nothing.
-            if ($airport->fuel !== null || $airport->telephone !== null || $airport->service_schedule !== null) {
-                return $this->madhelServiceLines($airport);
-            }
+        $columns = $airport->is_aip_delegated
+            ? ['aip_'.$field, $field]
+            : [$field, 'aip_'.$field];
 
-            return ['_Todavía no importé la ficha de la AIP de este aeródromo._'];
+        foreach ($columns as $column) {
+            if ($airport->{$column} !== null) {
+                return ['value' => $airport->{$column}, 'source' => str_starts_with($column, 'aip_') ? 'aip' : 'madhel'];
+            }
         }
 
-        $unpublished = 'sin dato publicado en la AIP';
+        return null;
+    }
 
-        $lines = [
-            '⛽ Combustible: '.($airport->aip_fuel ?? $unpublished),
-            '☎️ Teléfono: '.($airport->aip_telephone === null ? $unpublished : implode(' · ', $airport->aip_telephone)),
-        ];
+    /**
+     * What of the ficha above came off the AIP rather than MADHEL, named the
+     * way the attribution line reads them and in the order they were printed.
+     *
+     * @param  array<int, string>  $navaids  The radioayudas block, empty when there is none.
+     * @return array<int, string>
+     */
+    protected function aipCreditedFields(Airport $airport, array $navaids): array
+    {
+        $credited = [];
 
-        if ($airport->aip_service_schedule !== null) {
-            $lines[] = "🕐 Horario: {$airport->aip_service_schedule}";
+        foreach (['fuel' => 'combustible', 'telephone' => 'teléfono', 'service_schedule' => 'horario'] as $field => $label) {
+            if (($this->serviceField($airport, $field)['source'] ?? null) === 'aip') {
+                $credited[] = $label;
+            }
         }
 
         if ($airport->aip_ats_frequency !== null) {
-            $lines[] = "📻 Frecuencia: {$airport->aip_ats_frequency}";
+            $credited[] = 'frecuencia';
         }
 
-        return $lines;
+        if ($navaids !== []) {
+            $credited[] = 'radioayudas';
+        }
+
+        return $credited;
+    }
+
+    /**
+     * The registries whose ficha for this aerodrome was actually imported,
+     * named as the message names them and ordered the way serviceField() asks
+     * them.
+     *
+     * @return array<int, string>
+     */
+    protected function serviceSheetsRead(Airport $airport): array
+    {
+        // MADHEL is left out for a delegated aerodrome even when its ficha was
+        // imported: it empties the `data` block for exactly those, so its
+        // silence there is the delegation, not a service the aerodrome lacks.
+        // Its columns can still fill a line — serviceField() falls back to
+        // them — but "sin dato publicado en MADHEL" is never said about one.
+        $sheets = $airport->is_aip_delegated
+            ? ['la AIP' => $airport->aip_details_updated_at]
+            : ['MADHEL' => $airport->details_updated_at, 'la AIP' => $airport->aip_details_updated_at];
+
+        return array_keys(array_filter($sheets));
+    }
+
+    /**
+     * The tower — or the tower and approach on one radio — off AD 2.18 of the
+     * aerodrome's AIP ficha.
+     *
+     * Its own method rather than a line inside aipServiceLines() because it is
+     * the one AIP field that belongs on a ficha whose other services come from
+     * MADHEL: see airportServiceLines().
+     *
+     * @return array<int, string>
+     */
+    protected function atsFrequencyLines(Airport $airport): array
+    {
+        return $airport->aip_ats_frequency === null
+            ? []
+            : ["📻 Frecuencia: {$airport->aip_ats_frequency}"];
     }
 
     /**
