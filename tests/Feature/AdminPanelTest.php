@@ -206,3 +206,15 @@ it('logs the admin out', function () {
 
     $this->assertGuest();
 });
+
+it('gates the log viewer the same way as the rest of the panel', function () {
+    $this->get('/logs')->assertRedirect(route('admin.login'));
+
+    $this->actingAs(User::factory()->create())
+        ->get('/logs')
+        ->assertForbidden();
+
+    $this->actingAs(admin())
+        ->get('/logs')
+        ->assertOk();
+});

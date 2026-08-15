@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\WhatsappSender;
+use App\Models\User;
 use App\Services\AerometService;
 use App\Services\MagneticVariationService;
 use App\Services\MetarService;
@@ -17,6 +18,7 @@ use App\Services\TafService;
 use App\Support\AdminMetrics;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -83,5 +85,9 @@ class AppServiceProvider extends ServiceProvider
         // to burn through the OpenRouter budget. Keep the cap well below what
         // a legitimate client would ever need.
         RateLimiter::for('notams', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
+
+        // Satisfies opcodesio/log-viewer's own production check; the actual
+        // gate is the `admin` middleware already in front of /logs.
+        Gate::define('viewLogViewer', fn (User $user) => $user->is_admin === true);
     }
 }
