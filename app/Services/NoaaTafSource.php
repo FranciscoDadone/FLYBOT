@@ -18,12 +18,13 @@ class NoaaTafSource extends NoaaReportSource
     }
 
     /**
-     * The look-back window has to clear one issue cycle: TAFs go out every six
-     * hours, so a shorter window would come back empty for stations that had
-     * simply not reissued yet, and be read as "no forecast published".
+     * No window at all. /api/data/taf rejects "hours" with a 400 ("Unexpected
+     * query parameter provided") — unlike the METAR endpoint, which still takes
+     * it — and answers with the forecast in force on its own, which is the only
+     * one this service keeps anyway.
      */
-    protected function hours(): int
+    protected function hours(): ?int
     {
-        return (int) config('services.noaa.taf_hours');
+        return null;
     }
 }

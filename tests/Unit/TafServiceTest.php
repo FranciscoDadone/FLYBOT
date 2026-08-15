@@ -121,15 +121,21 @@ it('takes only the raw forecast from NOAA', function () {
         ->toBe('TAF SAEZ 271700Z 2718/2818 02005KT 9999');
 });
 
-it('asks NOAA far enough back to clear an issue cycle', function () {
+/**
+ * NOAA's TAF endpoint does not take a look-back window, and does not ignore one
+ * either: "hours" comes back as a 400 ("Unexpected query parameter provided"),
+ * which took out the whole fallback while the SMN was blocking. The METAR
+ * endpoint still accepts it, so this is a per-endpoint difference rather than a
+ * setting, and it is asserted here because Http::fake() matches on the URL
+ * without caring whether the live API would have accepted the query.
+ */
+it('asks NOAA for the forecast without a look-back window', function () {
     fakeTaf(Http::response(smnFixture('challenge.html'), 403));
 
     tafService()->getTafs('SAEZ');
 
-    // TAFs go out every six hours; a shorter window would read a station that
-    // simply had not reissued yet as having no forecast at all.
     Http::assertSent(fn ($request) => ! str_contains($request->url(), 'api/data/taf')
-        || (int) $request->data()['hours'] >= 6);
+        || ! array_key_exists('hours', $request->data()));
 });
 
 it('only fails once every source has been tried', function () {

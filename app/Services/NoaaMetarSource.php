@@ -17,7 +17,7 @@ class NoaaMetarSource extends NoaaReportSource
         return 'rawOb';
     }
 
-    protected function hours(): int
+    protected function hours(): ?int
     {
         return (int) config('services.noaa.metar_hours');
     }

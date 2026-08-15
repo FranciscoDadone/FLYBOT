@@ -229,10 +229,8 @@ return [
         'base_url' => env('NOAA_METAR_BASE_URL', 'https://aviationweather.gov'),
         'metar_hours' => env('NOAA_METAR_HOURS', 2),
 
-        // Wider than the METAR window because the issue cycle is: a TAF goes
-        // out every six hours, so a shorter look-back would come back empty for
-        // a station that simply had not reissued yet.
-        'taf_hours' => env('NOAA_TAF_HOURS', 8),
+        // There is no taf_hours to match: the TAF endpoint takes no window and
+        // rejects one, so NoaaTafSource asks for none. See NoaaTafSource.
     ],
 
     // Servicio de Hidrografía Naval: salida y puesta del sol, y crepúsculo

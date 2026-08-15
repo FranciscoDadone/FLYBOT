@@ -48,22 +48,29 @@ abstract class NoaaReportSource implements AviationReportSource
     abstract protected function rawField(): string;
 
     /**
-     * How far back to look for reports, in hours.
+     * How far back to look for reports, in hours, or null to ask for no window
+     * at all — the endpoints do not all accept one, and one that does not
+     * rejects the request outright rather than ignoring the parameter.
      */
-    abstract protected function hours(): int;
+    abstract protected function hours(): ?int;
 
     /**
      * @return array<int, array<string, mixed>>
      */
     public function fetch(string $icaoCode): array
     {
+        $query = [
+            'ids' => strtoupper(trim($icaoCode)),
+            'format' => 'json',
+        ];
+
+        if ($this->hours() !== null) {
+            $query['hours'] = $this->hours();
+        }
+
         $response = Http::timeout(15)
             ->acceptJson()
-            ->get("{$this->baseUrl}/api/data/{$this->endpoint()}", [
-                'ids' => strtoupper(trim($icaoCode)),
-                'format' => 'json',
-                'hours' => $this->hours(),
-            ]);
+            ->get("{$this->baseUrl}/api/data/{$this->endpoint()}", $query);
 
         // A station with nothing to report answers 204 No Content, which is an
         // answer rather than a failure.
