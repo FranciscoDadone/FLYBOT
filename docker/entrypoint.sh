@@ -12,6 +12,7 @@ mkdir -p \
     storage/logs \
     storage/app/public \
     storage/app/private \
+    storage/app/private/mpdf \
     bootstrap/cache
 
 DB_FILE="${DB_DATABASE:-/app/database/sqlite/database.sqlite}"

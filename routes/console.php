@@ -68,3 +68,10 @@ Schedule::command('pronarea:refresh-cache')
 // aeromet.ttl, so each of AerometStationResolver::FIR_GROUPS costs at most
 // one request however many of its stations get asked about in between.
 Schedule::command('aeromet:refresh-cache')->everyFiveMinutes()->withoutOverlapping();
+
+/**
+ * A draft goes stale in hours and a flight plan PDF sits behind a URL anyone
+ * holding the link can fetch, so neither is left lying around. Nothing else
+ * runs at this hour.
+ */
+Schedule::command('fpl:prune')->dailyAt('04:30')->withoutOverlapping();

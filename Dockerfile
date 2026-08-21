@@ -7,8 +7,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # La imagen ya trae pdo_sqlite, curl, dom, mbstring y opcache. pcntl es lo que
-# el worker necesita para atender SIGTERM y terminar el job en curso.
-RUN install-php-extensions pcntl zip
+# el worker necesita para atender SIGTERM y terminar el job en curso; gd es lo
+# que mPDF necesita para poner el formulario de plan de vuelo de fondo.
+RUN install-php-extensions pcntl zip gd
 
 # La capacidad sobre el binario es lo que le permite tomar el puerto 80 sin
 # correr como root.
