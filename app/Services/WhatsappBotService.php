@@ -108,6 +108,52 @@ class WhatsappBotService
     ];
 
     /**
+     * Words that mean the user wants to file a flight plan.
+     *
+     * "plan" on its own counts, but only as a whole word -- which is why it is
+     * matched by pattern below and not from this list. Substring matching
+     * would read "plano de aeródromo" as a flight plan and take a chart
+     * request away from the AIP; a word boundary does not, because the "o"
+     * that follows is a word character. It has to count, because nobody
+     * writes out "plan de vuelo" before a registration: they write "plan
+     * LV-HAW a Santa Rosa".
+     *
+     * @var array<int, string>
+     */
+    protected const FPL_KEYWORDS = [
+        'plan de vuelo', 'plan vuelo', 'planes de vuelo',
+        'presentar un plan', 'presentar plan', 'cargar un plan', 'hacer un plan',
+    ];
+
+    /**
+     * The same topic, for the two forms that only work on word boundaries:
+     * "plan" (never "plano") and the acronym.
+     */
+    protected const FPL_PATTERN = '/\b(?:plan(?:es)?|fpl)\b/';
+
+    /**
+     * Words that take a message away from an open flight plan draft.
+     *
+     * While a draft is open, an unrecognised message is read as a correction
+     * to it -- which is right for "POB 3" and wrong for "metar SAZR". Asking
+     * about the weather at the destination in the middle of filling in a plan
+     * is exactly what a pilot does, so the way out has to work without
+     * abandoning the draft.
+     *
+     * Only explicit topic names, never the fuzzy synonyms: "manana" is absent
+     * on purpose, so "mañana 19:45" stays a correction instead of becoming a
+     * forecast. Everything not on this list belongs to the plan while one is
+     * being filled in — which is why the list is names of things the bot
+     * answers, words nobody writes into a flight plan by accident.
+     *
+     * @var array<int, string>
+     */
+    protected const FPL_ESCAPE_KEYWORDS = [
+        'notam', 'metar', 'speci', 'taf', 'pronarea', 'aeromet', 'crepusculo',
+        'pronostico', 'carta', 'cartas', 'ficha', 'menu', 'ayuda', 'alertas',
+    ];
+
+    /**
      * Words that ask for PRONAREA, the SMN's area forecast by FIR.
      *
      * Checked before TAF_KEYWORDS for the same reason as the sun keywords:
@@ -196,6 +242,11 @@ class WhatsappBotService
      * @var array<string, array<int, string>>
      */
     protected const TOPIC_KEYWORDS = [
+        // "plan" and "planes" are on this list and not on FPL_KEYWORDS: the
+        // topic matches them by word boundary, and withoutTopicWords drops
+        // whole tokens, so both readings agree without either having to match
+        // the inside of "plano".
+        'fpl' => [...self::FPL_KEYWORDS, 'plan', 'planes', 'fpl'],
         'pista' => self::RUNWAY_WIND_KEYWORDS,
         'metar' => self::METAR_KEYWORDS,
         'taf' => self::TAF_KEYWORDS,
@@ -291,6 +342,21 @@ class WhatsappBotService
      * changes with every AIRAC amendment — the listing is read again and the
      * row taken from it.
      */
+    /**
+     * A tap on the flight plan flow. The draft belongs to the phone number, so
+     * the payload names an action and -- for the two that act on a plan already
+     * filed -- which plan; nothing else has to travel in it.
+     */
+    protected const BUTTON_FLIGHT_PLAN = '/^fpl:(ok|fix|drop|new|again|back)(?::(\d+))?$/';
+
+    /**
+     * One of the options offered for a box that takes a code: which box, and
+     * which code. Separate from the pattern above because it carries a field
+     * name rather than a plan id, and folding the two together would make both
+     * of them looser than either needs to be.
+     */
+    protected const BUTTON_FLIGHT_PLAN_CHOICE = '/^fpl:set:([a-zA-Z]{1,32}):([A-Z0-9]{1,6})$/';
+
     protected const BUTTON_DOC = '/^doc:([A-Z]{4}):(\d{1,2})$/';
 
     /**
@@ -319,6 +385,7 @@ class WhatsappBotService
         protected AipService $aip,
         protected AipDocumentClassifier $aipDocuments,
         protected AipDocumentSummarizerService $aipSummarizer,
+        protected FlightPlanBotService $flightPlans,
     ) {
         $this->context = new ReplyContext;
     }
@@ -349,6 +416,31 @@ class WhatsappBotService
         }
 
         $topic = $this->context->topic = $this->topic($message);
+
+        // A draft that is being filled in keeps the free text, whatever topic()
+        // made of it. A flight plan is written in the same words as everything
+        // else the bot answers -- "de San Fernando a Santa Rosa pasado mañana"
+        // has an aerodrome and a day in it, so read on its own it is a TAF --
+        // and while the form is open the plan is what the pilot is talking
+        // about. The escape words are the way out, and they have to be said:
+        // that is what stops the draft from being a trap.
+        if ($from !== null
+            && $topic !== 'fpl'
+            && ! $this->mentions(Str::ascii(mb_strtolower($message)), self::FPL_ESCAPE_KEYWORDS)
+            && $this->flightPlans->capturesMessage($from, $topic === 'info')) {
+            $this->context->topic = 'fpl';
+
+            return $this->flightPlans->amend($message, $from);
+        }
+
+        // Names two or three aerodromes rather than one, so it cannot go
+        // through the single-indicator matching below — the same reason the
+        // sun and AEROMET return from here.
+        if ($topic === 'fpl') {
+            return $from === null
+                ? WhatsappReply::of('Los planes de vuelo sólo funcionan por WhatsApp, donde puedo guardarte el borrador y mandarte el PDF.')
+                : $this->flightPlans->start($this->withoutTopicWords($message, 'fpl'), $from);
+        }
 
         // Resolves a city and not an aerodrome, so it never reaches the
         // indicator matching below.
@@ -463,6 +555,18 @@ class WhatsappBotService
             return $this->runwayWindReply($this->context->anacCode = $this->airports->resolve($m[1]), $from);
         }
 
+        if (preg_match(self::BUTTON_FLIGHT_PLAN_CHOICE, $payload, $m) === 1) {
+            $this->context->topic = 'fpl';
+
+            return $this->flightPlans->choose($m[1], $m[2], $from);
+        }
+
+        if (preg_match(self::BUTTON_FLIGHT_PLAN, $payload, $m) === 1) {
+            $this->context->topic = 'fpl';
+
+            return $this->flightPlans->act($m[1], $from, isset($m[2]) ? (int) $m[2] : null);
+        }
+
         if (preg_match(self::BUTTON_DOC, $payload, $m) === 1) {
             $this->context->topic = 'carta';
             $this->context->anacCode = $this->airports->resolve($m[1]);
@@ -521,6 +625,8 @@ class WhatsappBotService
         $normalized = Str::ascii(mb_strtolower($message));
 
         return match (true) {
+            $this->mentions($normalized, self::FPL_KEYWORDS) => 'fpl',
+            preg_match(self::FPL_PATTERN, $normalized) === 1 => 'fpl',
             $this->mentions($normalized, self::SUN_KEYWORDS) => 'crepusculo',
             $this->mentions($normalized, self::PRONAREA_KEYWORDS) => 'pronarea',
             $this->mentions($normalized, self::AEROMET_KEYWORDS) => 'aeromet',

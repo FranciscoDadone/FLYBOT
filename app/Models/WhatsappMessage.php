@@ -50,6 +50,7 @@ class WhatsappMessage extends Model
         'metar' => 'METAR',
         'taf' => 'TAF',
         'crepusculo' => 'Crepúsculo',
+        'fpl' => 'Plan de vuelo',
         'subscribe' => 'Alta de alerta',
         'unsubscribe' => 'Baja de alerta',
         'list' => 'Alertas activas',

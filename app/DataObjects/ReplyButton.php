@@ -118,6 +118,171 @@ final readonly class ReplyButton
     }
 
     /**
+     * "Here is the plan as I have it. What now?"
+     *
+     * Offered on every draft card, complete or not, because the way out has to
+     * travel with the thing it is a way out of -- same reasoning as the
+     * unsubscribe button riding on every alert. The confirm caption says which
+     * of the two it is: a plan with boxes still empty can still be printed,
+     * and a pilot who knows the form may well want to, but it should not read
+     * as if the bot thinks it is finished.
+     */
+    public static function flightPlanDraft(bool $isComplete): self
+    {
+        return new self([
+            ['id' => 'fpl:ok', 'title' => $isComplete ? '✅ Generar PDF' : '✅ Generar igual'],
+            ['id' => 'fpl:fix', 'title' => '✏️ Corregir'],
+            ['id' => 'fpl:drop', 'title' => '🗑️ Descartar'],
+        ]);
+    }
+
+    /**
+     * What to offer once the document has been sent.
+     *
+     * The way back is first because it is what actually happens next: most of
+     * general aviation flies somewhere and comes home the same day, and having
+     * to retype the whole plan for the return leg is the thing that would make
+     * this feature not worth using twice.
+     *
+     * The third one closes the plan rather than starting another, because the
+     * draft outlives the PDF by a few hours so a late correction has somewhere
+     * to land, and until it is closed the bot is still listening for one. It
+     * says "Listo" and not "Descartar": the plan was already generated and the
+     * PDF is not going anywhere, and a bin on the message that just delivered
+     * it would read as if it were.
+     */
+    public static function flightPlanIssued(int $planId): self
+    {
+        return new self([
+            ['id' => "fpl:back:{$planId}", 'title' => '🔄 La vuelta'],
+            ['id' => 'fpl:fix', 'title' => '✏️ Corregir'],
+            ['id' => 'fpl:drop', 'title' => '👌 Listo'],
+        ]);
+    }
+
+    /**
+     * The way into the topic, for someone who asked for a flight plan and said
+     * nothing else.
+     *
+     * With nothing on file there is only one thing to offer, so it is offered
+     * on its own rather than padded out with choices that would all do the
+     * same thing.
+     */
+    public static function flightPlanStart(?int $lastPlanId): self
+    {
+        if ($lastPlanId === null) {
+            return new self([
+                ['id' => 'fpl:new', 'title' => '🆕 Cargar un plan'],
+            ]);
+        }
+
+        return new self([
+            ['id' => "fpl:again:{$lastPlanId}", 'title' => '📄 Repetir último'],
+            ['id' => "fpl:back:{$lastPlanId}", 'title' => '🔄 La vuelta'],
+            ['id' => 'fpl:new', 'title' => '🆕 Plan nuevo'],
+        ]);
+    }
+
+    /**
+     * The boxes whose answer is a code out of a closed list, and what each code
+     * means in words.
+     *
+     * These are the questions worth tapping instead of typing. The form takes a
+     * letter, the letter is ICAO's, and a pilot who does not fly with item 10
+     * memorised has to go and look it up -- which is a trip out of WhatsApp in
+     * the middle of a form. The second line of each row is what makes the offer
+     * worth more than the question was: it says what the letter means, which is
+     * the part a question could never fit.
+     *
+     * Not the whole of any of these lists. Item 10b alone runs to nine letters
+     * and item 10a to about thirty; what is here is what general aviation
+     * flies with, and anything else is still typed. The question says so, and a
+     * typed answer is taken exactly as it was before.
+     *
+     * @var array<string, array<int, array{0: string, 1: string, 2: string}>>
+     */
+    protected const FLIGHT_PLAN_CHOICES = [
+        'flightRules' => [
+            ['I', 'IFR', 'Todo el vuelo por instrumentos'],
+            ['V', 'VFR', 'Todo el vuelo visual'],
+            ['Y', 'IFR y después VFR', 'Sale por instrumentos y cambia a visual'],
+            ['Z', 'VFR y después IFR', 'Sale visual y cambia a instrumentos'],
+        ],
+        'wakeTurbulenceCat' => [
+            ['L', 'L — Liviana', 'Hasta 7 toneladas de peso máximo de despegue'],
+            ['M', 'M — Media', 'Entre 7 y 136 toneladas'],
+            ['H', 'H — Pesada', '136 toneladas o más'],
+            ['J', 'J — Súper', 'Sólo el A380'],
+        ],
+        'equipmentCom' => [
+            ['SDG', 'Estándar + DME + GNSS', 'VHF, VOR e ILS, más DME y GPS'],
+            ['S', 'Estándar', 'VHF, VOR e ILS'],
+            ['SG', 'Estándar + GNSS', 'VHF, VOR e ILS, más GPS'],
+            ['V', 'Sólo VHF', 'Radio y nada más'],
+        ],
+        'equipmentSurveillance' => [
+            ['C', 'C — Modo A y C', 'Transpondedor que responde con la altitud'],
+            ['S', 'S — Modo S', 'Altitud y matrícula'],
+            ['N', 'N — Sin transpondedor', 'No llevo equipo de vigilancia'],
+        ],
+    ];
+
+    /**
+     * The options for one box, drawn as a sheet, or null for a box that has
+     * none and is answered by writing it.
+     *
+     * The way out rides on the sheet as its last row. A message carries either
+     * three buttons or one list and never both, so without it the sheet would
+     * be the one message of the flow with no way off it.
+     */
+    public static function flightPlanChoices(string $field): ?self
+    {
+        if (! isset(self::FLIGHT_PLAN_CHOICES[$field])) {
+            return null;
+        }
+
+        $rows = array_map(fn (array $choice) => [
+            'id' => "fpl:set:{$field}:{$choice[0]}",
+            'title' => Str::limit($choice[1], self::MAX_ROW_TITLE - 1, '…'),
+            'description' => Str::limit($choice[2], self::MAX_ROW_DESCRIPTION - 1, '…'),
+        ], self::FLIGHT_PLAN_CHOICES[$field]);
+
+        $rows[] = [
+            'id' => 'fpl:drop',
+            'title' => '🗑️ Descartar el plan',
+            'description' => 'Cancelo el plan y volvemos al bot de siempre',
+        ];
+
+        return new self(array_slice($rows, 0, self::MAX_LIST_ROWS), '📋 Ver opciones');
+    }
+
+    /**
+     * Whether this is one of the options that box was actually offered.
+     *
+     * A tapped id is one we wrote, so it arrives well-formed -- but it is a
+     * value on its way into an aeronautical document, and the list it has to
+     * belong to is right here. Checking costs nothing.
+     */
+    public static function isFlightPlanChoice(string $field, string $value): bool
+    {
+        return in_array($value, array_column(self::FLIGHT_PLAN_CHOICES[$field] ?? [], 0), true);
+    }
+
+    /**
+     * The way out, offered under every question asked while filling a plan.
+     *
+     * One button and not three: mid-way through the form there is nothing to
+     * confirm and nothing to correct yet, and offering either would be asking
+     * about a plan that does not exist.
+     */
+    public static function flightPlanCancel(): self
+    {
+        return new self([
+            ['id' => 'fpl:drop', 'title' => '🗑️ Descartar'],
+        ]);
+    }
+
+    /**
      * Every topic that can be reached with a tap, in the order they are
      * offered. The one just answered is dropped, so the menu is always this
      * list minus itself.

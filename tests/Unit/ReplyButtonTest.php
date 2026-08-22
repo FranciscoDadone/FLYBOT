@@ -10,6 +10,21 @@ use App\DataObjects\ReplyButton;
 const MENU_GRAMMAR = '/^ask:(notam|metar|taf|carta|crepusculo|info|ubicacion):[A-Z]{3,4}$/';
 
 /**
+ * WhatsappBotService::BUTTON_FLIGHT_PLAN, written out. The plan a tap acts on
+ * is named by its own id and not by anything the payload can say about it,
+ * which is why the id is all any of these carry.
+ */
+const FPL_GRAMMAR = '/^fpl:(ok|fix|drop|new|again|back)(?::\d+)?$/';
+
+/**
+ * WhatsappBotService::BUTTON_FLIGHT_PLAN_CHOICE, written out, plus the way out
+ * that rides on the last row of every one of these sheets — a message carries
+ * either buttons or a list, so without it the sheet would be the one message of
+ * the flow with nothing to tap to leave.
+ */
+const FPL_CHOICE_GRAMMAR = '/^(fpl:set:[a-zA-Z]{1,32}:[A-Z0-9]{1,6}|fpl:drop)$/';
+
+/**
  * @param  array<int, string>  $titles
  * @return array<int, AipDocument>
  */
@@ -59,6 +74,66 @@ it('writes every id in the grammar the bot parses taps with', function (ReplyBut
     'menu after crepusculo' => [fn () => ReplyButton::menu('crepusculo', 'SAEZ'), MENU_GRAMMAR],
     'menu after the ficha' => [fn () => ReplyButton::menu('info', 'AGR', withCharts: false), MENU_GRAMMAR],
     'AIP documents' => [fn () => ReplyButton::documents(manyAipDocuments(4)), '/^doc:[A-Z]{4}:\d{1,2}$/'],
+    'flight plan draft, complete' => [fn () => ReplyButton::flightPlanDraft(true), FPL_GRAMMAR],
+    'flight plan draft, incomplete' => [fn () => ReplyButton::flightPlanDraft(false), FPL_GRAMMAR],
+    'flight plan issued' => [fn () => ReplyButton::flightPlanIssued(12), FPL_GRAMMAR],
+    'flight plan start, with history' => [fn () => ReplyButton::flightPlanStart(12), FPL_GRAMMAR],
+    'flight plan start, first time' => [fn () => ReplyButton::flightPlanStart(null), FPL_GRAMMAR],
+    'flight plan cancel' => [fn () => ReplyButton::flightPlanCancel(), FPL_GRAMMAR],
+    'flight plan rules' => [fn () => ReplyButton::flightPlanChoices('flightRules'), FPL_CHOICE_GRAMMAR],
+    'flight plan wake' => [fn () => ReplyButton::flightPlanChoices('wakeTurbulenceCat'), FPL_CHOICE_GRAMMAR],
+    'flight plan com equipment' => [fn () => ReplyButton::flightPlanChoices('equipmentCom'), FPL_CHOICE_GRAMMAR],
+    'flight plan surveillance' => [fn () => ReplyButton::flightPlanChoices('equipmentSurveillance'), FPL_CHOICE_GRAMMAR],
+]);
+
+/**
+ * Every option a sheet offers has to be one the bot will accept back, and the
+ * bot checks a tapped value against the same table the sheet was drawn from.
+ * Nothing at runtime ties the drawing to the checking; this does.
+ */
+it('offers only options it will take back', function (string $field) {
+    $rows = array_column((array) ReplyButton::flightPlanChoices($field)?->buttons, 'id');
+
+    foreach ($rows as $id) {
+        if ($id === 'fpl:drop') {
+            continue;
+        }
+
+        [, , , $value] = explode(':', $id);
+
+        expect(ReplyButton::isFlightPlanChoice($field, $value))->toBeTrue();
+    }
+})->with(['flightRules', 'wakeTurbulenceCat', 'equipmentCom', 'equipmentSurveillance']);
+
+it('has no options for a box that is written out', function () {
+    expect(ReplyButton::flightPlanChoices('aircraftColourAndMarkings'))->toBeNull()
+        ->and(ReplyButton::isFlightPlanChoice('aircraftColourAndMarkings', 'X'))->toBeFalse();
+});
+
+/**
+ * A message renders at most three buttons and cuts a caption at twenty
+ * characters — past either, WhatsApp draws the offer wrong or not at all.
+ * These are plain buttons rather than a list sheet, so the sheet test above
+ * does not cover them.
+ */
+it('stays inside what plain buttons will render', function (ReplyButton $button) {
+    expect($button->listLabel)->toBeNull()
+        ->and(count($button->buttons))->toBeGreaterThan(0)
+        ->and(count($button->buttons))->toBeLessThanOrEqual(3);
+
+    foreach ($button->buttons as $row) {
+        expect(mb_strlen($row['title']))->toBeLessThanOrEqual(20);
+    }
+})->with([
+    'flight plan draft, complete' => [fn () => ReplyButton::flightPlanDraft(true)],
+    'flight plan draft, incomplete' => [fn () => ReplyButton::flightPlanDraft(false)],
+    'flight plan issued' => [fn () => ReplyButton::flightPlanIssued(12)],
+    'flight plan start, with history' => [fn () => ReplyButton::flightPlanStart(12)],
+    'flight plan start, first time' => [fn () => ReplyButton::flightPlanStart(null)],
+    'flight plan cancel' => [fn () => ReplyButton::flightPlanCancel()],
+    'subscribe' => [fn () => ReplyButton::subscribe('SAEZ')],
+    'unsubscribe' => [fn () => ReplyButton::unsubscribe('SAEZ')],
+    'runway wind' => [fn () => ReplyButton::runwayWind('SAEZ')],
 ]);
 
 /**
@@ -94,6 +169,10 @@ it('stays inside what a list sheet will render', function (ReplyButton $button) 
     'menu after crepusculo' => [fn () => ReplyButton::menu('crepusculo', 'SAEZ')],
     'menu after the ficha' => [fn () => ReplyButton::menu('info', 'SAEZ')],
     'menu without an icao' => [fn () => ReplyButton::menu('notam', 'AGR', withCharts: false)],
+    'flight plan rules' => [fn () => ReplyButton::flightPlanChoices('flightRules')],
+    'flight plan wake' => [fn () => ReplyButton::flightPlanChoices('wakeTurbulenceCat')],
+    'flight plan com equipment' => [fn () => ReplyButton::flightPlanChoices('equipmentCom')],
+    'flight plan surveillance' => [fn () => ReplyButton::flightPlanChoices('equipmentSurveillance')],
 ]);
 
 /**

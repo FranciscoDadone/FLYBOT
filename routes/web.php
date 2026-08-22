@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LoginController;
 use App\Http\Controllers\Admin\MessageController;
+use App\Http\Controllers\FlightPlanDocumentController;
 use App\Http\Controllers\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +33,16 @@ Route::get('/', fn () => view('landing', $whatsappLink()));
  * having on its own: the bot keeps every message written to it.
  */
 Route::get('/privacidad', fn () => view('privacidad', $whatsappLink()));
+
+/**
+ * The flight plan PDF, which WhatsApp fetches itself: Meta downloads the URL
+ * with none of our credentials, so it has to be reachable without them. The
+ * token is what stands in for authentication — forty random characters, good
+ * for one plan, revoked by deleting its row and expiring on a column.
+ */
+Route::get('/fpl/{token}.pdf', FlightPlanDocumentController::class)
+    ->where('token', '[A-Za-z0-9]{40}')
+    ->name('fpl.pdf');
 
 Route::get('/whatsapp/webhook', [WhatsappWebhookController::class, 'verify']);
 Route::post('/whatsapp/webhook', [WhatsappWebhookController::class, 'handle']);
