@@ -259,6 +259,12 @@ return [
         'app_secret' => env('WHATSAPP_APP_SECRET'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
 
+        // The WhatsApp Business Account the number belongs to. Only the Flows
+        // API needs it -- a form is created and published on the account, not
+        // on the number -- and only from the console, never while answering a
+        // message.
+        'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+
         // Only the landing page's wa.me link needs the number as such.
         'number' => env('WHATSAPP_NUMBER'),
 

@@ -41,6 +41,11 @@ class ProcessWhatsappMessage implements ShouldQueue
         // The row the webhook already opened for this message, when there is
         // one: the local test endpoint and the tests call the job directly.
         protected ?WhatsappMessage $log = null,
+
+        // A submitted WhatsApp form, as the JSON Meta delivers it. Last rather
+        // than beside the button payload it replaces, so that every existing
+        // caller keeps meaning what it meant.
+        protected ?string $flowResponse = null,
     ) {}
 
     /**
@@ -53,7 +58,7 @@ class ProcessWhatsappMessage implements ShouldQueue
         $this->indicateTyping($sender);
 
         try {
-            $reply = $bot->reply($this->body, $this->from, $this->buttonPayload);
+            $reply = $bot->reply($this->body, $this->from, $this->buttonPayload, $this->flowResponse);
             $this->log?->recordUnderstanding($bot->lastContext());
         } catch (Throwable $e) {
             report($e);

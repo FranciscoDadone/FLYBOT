@@ -107,6 +107,13 @@ class WhatsappWebhookController extends Controller
 
         $buttonPayload = (string) ($tapped['id'] ?? '');
 
+        // A submitted form. Not a tap: the whole of what was filled in arrives
+        // as one JSON string, and the token we sent the form with comes back
+        // inside it saying which draft it belongs to.
+        $flowResponse = isset($message['interactive']['nfm_reply']['response_json'])
+            ? (string) $message['interactive']['nfm_reply']['response_json']
+            : null;
+
         $body = (string) ($message['text']['body'] ?? $tapped['title'] ?? '');
 
         // Meta anchors the typing indicator to the message being answered.
@@ -117,8 +124,15 @@ class WhatsappWebhookController extends Controller
         // message log, never good enough to identify anyone by.
         $profileName = trim((string) ($contacts[0]['profile']['name'] ?? ''));
 
-        if ($from === '' || ($body === '' && $buttonPayload === '')) {
+        if ($from === '' || ($body === '' && $buttonPayload === '' && $flowResponse === null)) {
             return;
+        }
+
+        // A form carries no words of its own -- Meta puts a placeholder where
+        // the body would be -- and a row in the panel with nothing in it reads
+        // as a message that was never answered. This says what the pilot did.
+        if ($flowResponse !== null && $body === '') {
+            $body = '📝 Formulario del plan de vuelo';
         }
 
         $attributes = [
@@ -143,7 +157,7 @@ class WhatsappWebhookController extends Controller
             return;
         }
 
-        ProcessWhatsappMessage::dispatch($from, $body, $messageId ?: null, $buttonPayload ?: null, $log);
+        ProcessWhatsappMessage::dispatch($from, $body, $messageId ?: null, $buttonPayload ?: null, $log, $flowResponse);
     }
 
     /**

@@ -397,9 +397,18 @@ class WhatsappBotService
      *                             (the local test endpoint), where there is nobody to subscribe.
      * @param  string|null  $buttonPayload  The id behind a tapped button, if this message is one.
      */
-    public function reply(string $message, ?string $from = null, ?string $buttonPayload = null): WhatsappReply
+    public function reply(string $message, ?string $from = null, ?string $buttonPayload = null, ?string $flowResponse = null): WhatsappReply
     {
         $this->context = new ReplyContext;
+
+        // A submitted form says which draft it belongs to on its own, so it
+        // needs neither the topic nor the open-draft check below: it is not a
+        // message about a flight plan, it is the flight plan.
+        if ($from !== null && $flowResponse !== null) {
+            $this->context->topic = 'fpl';
+
+            return $this->flightPlans->submitted($flowResponse, $from);
+        }
 
         if ($from !== null && $buttonPayload !== null) {
             $tapped = $this->replyToButton(trim($buttonPayload), $from);

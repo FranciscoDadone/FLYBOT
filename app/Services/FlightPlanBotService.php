@@ -7,6 +7,7 @@ use App\DataObjects\FlightPlanExtraction;
 use App\DataObjects\FlightPlanFields;
 use App\DataObjects\ReplyButton;
 use App\DataObjects\ReplyDocument;
+use App\DataObjects\ReplyFlow;
 use App\DataObjects\WhatsappReply;
 use App\Models\AircraftProfile;
 use App\Models\FlightPlan;
@@ -15,6 +16,7 @@ use App\Models\PilotProfile;
 use App\Support\AirportResolver;
 use App\Support\AroAisDirectory;
 use App\Support\FlightPlanCard;
+use App\Support\FlightPlanFlow;
 use App\Support\FlightPlanTextParser;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
@@ -44,6 +46,7 @@ class FlightPlanBotService
         protected FlightPlanCalculator $calculator,
         protected FlightPlanPdfRenderer $renderer,
         protected FlightPlanCard $card,
+        protected FlightPlanFlow $flow,
         protected AirportResolver $airports,
         protected AroAisDirectory $aroAis,
     ) {}
@@ -161,6 +164,39 @@ class FlightPlanBotService
         }
 
         return $this->present($this->drafts->apply($draft, new FlightPlanFields(...[$field => $value])));
+    }
+
+    /**
+     * A form, filled in and sent back.
+     *
+     * Everything arrives at once and keyed the way the plan already is, so
+     * there is no reading to do -- but there is no validating either. An
+     * endpointless form talks to nobody while it is open, so an aerodrome
+     * nobody can place only comes to light here, and the pilot is told which
+     * one rather than left to work out why the bot is still asking.
+     */
+    public function submitted(string $json, string $phone): WhatsappReply
+    {
+        $response = $this->flow->decode($json);
+
+        $draft = $this->drafts->byFlowToken($this->flow->token($response));
+
+        // The token is the whole of what ties a submission to a plan. A form
+        // whose draft is gone -- expired, discarded, or replaced by a newer
+        // plan -- has nothing to land on, and landing it on whatever is open
+        // instead would file one flight's aircraft against another's route.
+        if ($draft === null || $draft->phone !== $phone) {
+            return WhatsappReply::of(
+                'Ese formulario ya no está en pie: el borrador venció o lo cerraste. '
+                .'Escribime *plan de vuelo* y arrancamos de nuevo.',
+            );
+        }
+
+        [$fields, $unplaced] = $this->fromForm($response, $draft);
+
+        $reply = $this->present($this->drafts->apply($draft, $fields));
+
+        return $unplaced === [] ? $reply : $this->leadWith($this->unplacedMessage($unplaced), $reply);
     }
 
     /**
@@ -289,6 +325,25 @@ class FlightPlanBotService
 
         $question = $this->card->question($missing);
 
+        // A box whose answer is one of four letters is offered as four rows to
+        // tap. Only when it is being asked on its own: a sheet under a question
+        // about three boxes would answer one of them and look like it had
+        // answered all three.
+        $choices = $this->card->groupFor($missing) === []
+            ? ReplyButton::flightPlanChoices($missing[0])
+            : null;
+
+        // The form goes out carrying the question it replaces, in case it
+        // cannot be delivered. Built here, before the two paths part, so what
+        // a pilot falls back to is word for word what the bot would have said
+        // if there had never been a form -- and the draft remembers the same
+        // question either way, so a bare "3" still means three on board.
+        $form = $this->form($draft, (string) $question, $choices);
+
+        if ($form !== null) {
+            return $this->offerForm($draft, $missing, $form, $notUnderstood);
+        }
+
         if ($notUnderstood !== null) {
             $question = 'No entendí _"'.trim($notUnderstood).'"_ para eso.'."\n\n".$question;
         }
@@ -301,15 +356,152 @@ class FlightPlanBotService
             ? [$this->card->render($draft), (string) $question]
             : [(string) $question];
 
-        // A box whose answer is one of four letters is offered as four rows to
-        // tap. Only when it is being asked on its own: a sheet under a question
-        // about three boxes would answer one of them and look like it had
-        // answered all three.
-        $choices = $this->card->groupFor($missing) === []
-            ? ReplyButton::flightPlanChoices($missing[0])
-            : null;
-
         return new WhatsappReply($bodies, $choices ?? ReplyButton::flightPlanCancel());
+    }
+
+    /**
+     * The form to send with this draft, or null where there is none to send.
+     *
+     * Null is the ordinary state and not a failure: a Flow has to be published
+     * at Meta before it can be referenced, and nothing here needs it to exist
+     * -- without one the bot asks its questions in the chat exactly as it did
+     * before, which is also what the tests and the local endpoint run against.
+     */
+    protected function form(FlightPlanDraft $draft, string $fallback, ?ReplyButton $fallbackButton = null): ?ReplyFlow
+    {
+        $id = config('fpl.flow.id');
+
+        if (blank($id)) {
+            return null;
+        }
+
+        return new ReplyFlow(
+            id: (string) $id,
+            token: $this->drafts->flowToken($draft),
+            cta: (string) config('fpl.flow.cta'),
+            screen: FlightPlanFlow::FIRST_SCREEN,
+            data: $this->flow->prefill($draft->fields()),
+            mode: (string) config('fpl.flow.mode'),
+            fallback: $fallback,
+            fallbackButton: $fallbackButton ?? ReplyButton::flightPlanCancel(),
+        );
+    }
+
+    /**
+     * "Here is the whole form; what is left is in it."
+     *
+     * The way out is written rather than offered. A message carries a Flow's
+     * call to action or it carries buttons, never both, so the bin that rides
+     * on every other message of the plan cannot ride on this one -- and a
+     * pilot with no way out of a form is the thing this whole flow was built
+     * to avoid. "Cancelar" typed into the chat has always worked and is what
+     * this points at.
+     *
+     * @param  array<int, string>  $missing
+     */
+    protected function offerForm(FlightPlanDraft $draft, array $missing, ReplyFlow $form, ?string $notUnderstood): WhatsappReply
+    {
+        $lines = [];
+
+        if ($notUnderstood !== null) {
+            $lines[] = 'No entendí _"'.trim($notUnderstood).'"_.';
+            $lines[] = '';
+        }
+
+        $lines[] = count($missing) === 1
+            ? 'Me falta '.$this->card->shortfall($missing).'.'
+            : 'Me faltan '.$this->card->shortfall($missing).'.';
+
+        $lines[] = '';
+        $lines[] = 'Abrí el formulario: lo que ya sé viene cargado, completá el resto y mandámelo.';
+        $lines[] = '';
+        $lines[] = '_Si querés dejarlo, escribime *cancelar*._';
+
+        // The card only leads once there is enough on it to be worth reading,
+        // same as when the bot asks its questions one at a time.
+        $bodies = count($missing) <= count(FlightPlanFields::REQUIRED) - 4
+            ? [$this->card->render($draft), implode("\n", $lines)]
+            : [implode("\n", $lines)];
+
+        return new WhatsappReply($bodies, null, null, [], null, $form);
+    }
+
+    /**
+     * A submission, as boxes of the plan, plus whatever it named that no
+     * aerodrome answered to.
+     *
+     * @param  array<string, mixed>  $response
+     * @return array{0: FlightPlanFields, 1: array<int, string>}
+     */
+    protected function fromForm(array $response, FlightPlanDraft $draft): array
+    {
+        $fields = $this->flow->read($response);
+        $unplaced = [];
+
+        foreach ($this->flow->aerodromes($response) as $field => $text) {
+            $places = $this->placesIn($text);
+
+            if ($places === []) {
+                $unplaced[] = $text;
+
+                continue;
+            }
+
+            $fields = $fields->merge($this->place($field, $places[0]));
+        }
+
+        // The one box a form can empty on purpose. Everywhere else a blank is
+        // read as "left alone", because the form comes back whole every time
+        // and a component that failed to open filled in would otherwise wipe
+        // the plan; but an alternate that was there and is not any more is a
+        // pilot saying they are not carrying one.
+        if (trim((string) ($response['alternateAerodrome'] ?? '')) === ''
+            && $draft->fields()->alternateAerodrome !== null) {
+            $fields = $fields->merge(new FlightPlanFields(alternateAerodrome: FlightPlanFields::CLEAR));
+        }
+
+        $hhmm = $this->flow->departureTime($response);
+
+        if ($hhmm !== null) {
+            // The box says "hora local" and the pilot answered that box, which
+            // is the one thing a typed message could never be sure of. Item 13
+            // is UTC; the card prints both.
+            $at = $this->calculator->departureAt($hhmm, isUtc: false, dateText: $this->flow->departureDate($response));
+
+            $fields = $fields->merge(new FlightPlanFields(
+                departureTime: $at?->format('Hi') ?? $hhmm,
+                departureAt: $at,
+            ));
+        }
+
+        return [$fields, $unplaced];
+    }
+
+    /**
+     * @param  array<int, string>  $unplaced
+     */
+    protected function unplacedMessage(array $unplaced): string
+    {
+        $named = implode(', ', array_map(fn (string $text) => '_"'.$text.'"_', $unplaced));
+
+        return count($unplaced) === 1
+            ? "No encontré ningún aeródromo que se llame {$named}. Escribime el nombre o el código OACI y lo pongo."
+            : "No encontré ningún aeródromo para {$named}. Escribime los nombres o los códigos OACI y los pongo.";
+    }
+
+    /**
+     * The same reply with something said before it.
+     */
+    protected function leadWith(string $body, WhatsappReply $reply): WhatsappReply
+    {
+        return new WhatsappReply(
+            [$body, ...$reply->messages],
+            $reply->button,
+            $reply->menu,
+            $reply->documents,
+            $reply->location,
+            $reply->flow,
+        );
     }
 
     /**
@@ -461,14 +653,30 @@ class FlightPlanBotService
         // read against the whole plan.
         $this->drafts->remember($draft, []);
 
-        return new WhatsappReply([
-            "Decime qué cambio y lo corrijo.\n\n"
+        $correction = "Decime qué cambio y lo corrijo.\n\n"
             ."_Por ejemplo:_\n"
             ."_• 3 a bordo_\n"
             ."_• ruta DCT ASADA W68 IRASU_\n"
             ."_• salgo 20:15_\n"
-            .'_• sin alternativa_',
-        ], ReplyButton::flightPlanCancel());
+            .'_• sin alternativa_';
+
+        $form = $this->form($draft, $correction);
+
+        // The same form, opened on a plan that is already full: correcting one
+        // box and filling in eighteen are the same act once there is a form to
+        // do it in.
+        if ($form !== null) {
+            return new WhatsappReply(
+                [$this->card->render($draft), 'Abrí el formulario y cambiá lo que quieras.'],
+                null,
+                null,
+                [],
+                null,
+                $form,
+            );
+        }
+
+        return new WhatsappReply([$correction], ReplyButton::flightPlanCancel());
     }
 
     /**

@@ -84,6 +84,7 @@ it('writes every id in the grammar the bot parses taps with', function (ReplyBut
     'flight plan wake' => [fn () => ReplyButton::flightPlanChoices('wakeTurbulenceCat'), FPL_CHOICE_GRAMMAR],
     'flight plan com equipment' => [fn () => ReplyButton::flightPlanChoices('equipmentCom'), FPL_CHOICE_GRAMMAR],
     'flight plan surveillance' => [fn () => ReplyButton::flightPlanChoices('equipmentSurveillance'), FPL_CHOICE_GRAMMAR],
+    'flight plan type of flight' => [fn () => ReplyButton::flightPlanChoices('typeOfFlight'), FPL_CHOICE_GRAMMAR],
 ]);
 
 /**
@@ -103,7 +104,7 @@ it('offers only options it will take back', function (string $field) {
 
         expect(ReplyButton::isFlightPlanChoice($field, $value))->toBeTrue();
     }
-})->with(['flightRules', 'wakeTurbulenceCat', 'equipmentCom', 'equipmentSurveillance']);
+})->with(['flightRules', 'wakeTurbulenceCat', 'equipmentCom', 'equipmentSurveillance', 'typeOfFlight']);
 
 it('has no options for a box that is written out', function () {
     expect(ReplyButton::flightPlanChoices('aircraftColourAndMarkings'))->toBeNull()

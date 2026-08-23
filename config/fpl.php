@@ -32,6 +32,36 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | El formulario dentro de WhatsApp
+    |--------------------------------------------------------------------------
+    |
+    | Un Flow vive publicado en Meta y se referencia por id: `php artisan
+    | fpl:flow` sube el documento que arma App\Support\FlightPlanFlow y
+    | devuelve ese id. Sin id configurado el bot pregunta casilla por casilla
+    | como antes -- que es también lo que corre en los tests y en el endpoint
+    | local, donde no hay Meta a la que pedirle nada.
+    |
+    | La versión del Flow JSON es la del compilador de Meta, no la nuestra. Si
+    | al publicar contesta que no la soporta, se baja acá y se vuelve a subir.
+    |
+    */
+
+    'flow' => [
+        'id' => env('WHATSAPP_FPL_FLOW_ID'),
+
+        'name' => env('WHATSAPP_FPL_FLOW_NAME', 'Plan de vuelo'),
+
+        // "draft" sirve para probar una versión nueva contra el propio número
+        // sin publicarla; en producción es siempre "published".
+        'mode' => env('WHATSAPP_FPL_FLOW_MODE', 'published'),
+
+        'json_version' => env('WHATSAPP_FPL_FLOW_JSON_VERSION', '7.3'),
+
+        'cta' => '📝 Completar el plan',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Lifetimes
     |--------------------------------------------------------------------------
     |

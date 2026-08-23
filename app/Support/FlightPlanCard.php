@@ -161,6 +161,30 @@ class FlightPlanCard
     }
 
     /**
+     * What is still missing, named, for a message that hands over the whole
+     * form at once instead of asking one box at a time.
+     *
+     * Cut off after three. The form itself shows every empty box, so this is
+     * only there to say how much is left before the pilot opens it -- and a
+     * list of eighteen things would read as a refusal rather than as a
+     * summary.
+     *
+     * @param  array<int, string>  $missing
+     */
+    public function shortfall(array $missing): string
+    {
+        $named = array_values(array_filter(array_map(
+            fn (string $field) => self::PROMPTS[$field][0] ?? null,
+            $missing,
+        )));
+
+        $shown = array_slice($named, 0, 3);
+        $rest = count($named) - count($shown);
+
+        return implode(', ', $shown).($rest > 0 ? " y {$rest} más" : '');
+    }
+
+    /**
      * The boxes the next question covers, or none when it covers only the
      * first. What reads the answer needs to know which question was asked, and
      * this is the same reckoning question() makes.

@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Contracts\WhatsappSender;
+use App\DataObjects\ReplyFlow;
 use RuntimeException;
 
 class FakeWhatsappSender implements WhatsappSender
@@ -21,6 +22,11 @@ class FakeWhatsappSender implements WhatsappSender
      * @var array<int, array{to: string, body: string, label: string, rows: array<int, array{id: string, title: string, description?: string}>}>
      */
     public array $sentWithList = [];
+
+    /**
+     * @var array<int, array{to: string, body: string, flow: ReplyFlow}>
+     */
+    public array $sentWithFlow = [];
 
     /**
      * @var array<int, array{to: string, url: string, caption: string, filename: string}>
@@ -72,6 +78,23 @@ class FakeWhatsappSender implements WhatsappSender
         }
 
         $this->sentWithList[] = ['to' => $to, 'body' => $body, 'label' => $label, 'rows' => $rows];
+    }
+
+    /**
+     * Set to refuse forms and nothing else: what a reader whose WhatsApp
+     * cannot draw one looks like from here.
+     */
+    public bool $refusesFlows = false;
+
+    public function sendWithFlow(string $to, string $body, ReplyFlow $flow): void
+    {
+        $this->attempts++;
+
+        if ($this->shouldFail || $this->refusesFlows) {
+            throw new RuntimeException('WhatsApp no disponible.');
+        }
+
+        $this->sentWithFlow[] = ['to' => $to, 'body' => $body, 'flow' => $flow];
     }
 
     public function sendDocument(string $to, string $url, string $caption, string $filename): void

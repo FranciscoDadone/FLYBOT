@@ -25,9 +25,26 @@ it('deja intacto lo que el mensaje nuevo no menciona', function () {
 it('vacía un campo sólo con el centinela explícito', function () {
     $draft = new FlightPlanFields(alternateAerodrome: 'SAZR', route: 'DCT');
 
+    $cleared = $draft->merge(new FlightPlanFields(alternateAerodrome: FlightPlanFields::CLEAR));
+
     expect($draft->merge(new FlightPlanFields)->alternateAerodrome)->toBe('SAZR')
-        ->and($draft->merge(new FlightPlanFields(alternateAerodrome: FlightPlanFields::CLEAR))->alternateAerodrome)->toBeNull()
-        ->and($draft->merge(new FlightPlanFields(alternateAerodrome: FlightPlanFields::CLEAR))->route)->toBe('DCT');
+        ->and($cleared->resolved()->alternateAerodrome)->toBeNull()
+        ->and($cleared->resolved()->route)->toBe('DCT');
+});
+
+/*
+ * Un mensaje se lee varias veces y cada lectura se mergea sobre la anterior.
+ * Si el centinela se resolviera en el camino, "sin alternativa" llegaría al
+ * borrador como silencio -- que significa dejarlo como estaba.
+ */
+it('deja pasar el centinela por los merges intermedios', function () {
+    $incoming = (new FlightPlanFields)
+        ->merge(new FlightPlanFields(alternateAerodrome: FlightPlanFields::CLEAR))
+        ->merge(new FlightPlanFields(level: 'F100'));
+
+    expect($incoming->alternateAerodrome)->toBe(FlightPlanFields::CLEAR)
+        ->and((new FlightPlanFields(alternateAerodrome: 'SAZR'))->merge($incoming)->resolved()->alternateAerodrome)
+        ->toBeNull();
 });
 
 it('lista lo que falta en el orden en que conviene preguntarlo', function () {

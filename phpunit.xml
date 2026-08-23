@@ -34,6 +34,13 @@
         <env name="WHATSAPP_APP_SECRET" value=""/>
         <env name="WHATSAPP_VERIFY_TOKEN" value=""/>
         <env name="WHATSAPP_STRIP_AR_MOBILE_NINE" value="false"/>
+        <!-- Sin formulario publicado, que es el camino del chat. El que lo usa
+             se lo pone él: si esto saliera del .env de quien corre las
+             pruebas, la mitad de la suite haría una cosa distinta en cada
+             máquina. -->
+        <env name="WHATSAPP_BUSINESS_ACCOUNT_ID" value=""/>
+        <env name="WHATSAPP_FPL_FLOW_ID" value=""/>
+        <env name="WHATSAPP_FPL_FLOW_MODE" value="published"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

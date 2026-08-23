@@ -10,6 +10,7 @@ use App\Models\FlightPlanDraft;
 use App\Models\PilotProfile;
 use App\Support\AirportResolver;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * Keeps the flight plan a pilot is writing, and decides what goes in it.
@@ -68,6 +69,10 @@ class FlightPlanDraftService
                 'data' => [],
                 'auto' => [],
                 'asked' => [],
+                // A new plan on the same row: whatever form was sent for the
+                // last one stops being answerable, which is the point. It was
+                // about a different flight.
+                'flow_token' => null,
                 'source_plan_id' => $from?->id,
                 'expires_at' => $this->expiry(),
             ],
@@ -92,6 +97,12 @@ class FlightPlanDraftService
 
         [$fields, $auto] = $this->compute($fields, $auto);
 
+        // Whatever the message emptied on purpose stops being a value here and
+        // becomes an empty box. Once, at the end: every reading of the message
+        // has had its say by now, and one of them may well have been the one
+        // that said to empty it.
+        $fields = $fields->resolved();
+
         $draft->fill([
             'data' => $fields->toStorage(),
             'auto' => $auto,
@@ -113,6 +124,34 @@ class FlightPlanDraftService
         $draft->fill(['asked' => array_values($fields), 'expires_at' => $this->expiry()])->save();
 
         return $draft;
+    }
+
+    /**
+     * The token a form sent for this draft comes back with.
+     *
+     * One per draft rather than one per message: a pilot who scrolls up and
+     * fills in the form from a message sent ten minutes ago is answering the
+     * same draft, and rejecting that would be inventing a rule nobody could
+     * see. What bounds it is the draft's own life -- three hours, after which
+     * there is nothing for a submission to land on.
+     */
+    public function flowToken(FlightPlanDraft $draft): string
+    {
+        if (blank($draft->flow_token)) {
+            $draft->fill(['flow_token' => Str::random(32)])->save();
+        }
+
+        return (string) $draft->flow_token;
+    }
+
+    /**
+     * The draft a submitted form belongs to, or null when it has outlived it.
+     */
+    public function byFlowToken(string $token): ?FlightPlanDraft
+    {
+        return $token === ''
+            ? null
+            : FlightPlanDraft::query()->where('flow_token', $token)->active()->first();
     }
 
     public function markIssued(FlightPlanDraft $draft): FlightPlanDraft

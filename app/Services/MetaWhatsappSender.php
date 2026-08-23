@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\WhatsappSender;
+use App\DataObjects\ReplyFlow;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -65,6 +66,43 @@ class MetaWhatsappSender implements WhatsappSender
                         'title' => $label,
                         'rows' => array_map($this->row(...), array_values($rows)),
                     ]],
+                ],
+            ],
+        ])->throw();
+    }
+
+    /**
+     * The parameters are Meta's names, not ours: this is the one place the two
+     * vocabularies meet.
+     *
+     * `navigate` is the endpointless kind -- every screen of the form is in
+     * the published document and the phone walks them on its own, with nothing
+     * called back to us until the pilot submits. The other kind asks a server
+     * of ours between screens, which buys validation and costs an RSA-signed
+     * endpoint; nothing here needs it.
+     */
+    public function sendWithFlow(string $to, string $body, ReplyFlow $flow): void
+    {
+        $this->post([
+            'to' => $this->recipient($to),
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'flow',
+                'body' => ['text' => $body],
+                'action' => [
+                    'name' => 'flow',
+                    'parameters' => [
+                        'flow_message_version' => '3',
+                        'flow_token' => $flow->token,
+                        'flow_id' => $flow->id,
+                        'flow_cta' => $flow->cta,
+                        'flow_action' => 'navigate',
+                        'mode' => $flow->mode,
+                        'flow_action_payload' => [
+                            'screen' => $flow->screen,
+                            'data' => $flow->data,
+                        ],
+                    ],
                 ],
             ],
         ])->throw();

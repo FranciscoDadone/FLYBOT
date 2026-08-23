@@ -31,6 +31,7 @@ final readonly class WhatsappReply
         public ?ReplyMenu $menu = null,
         public array $documents = [],
         public ?ReplyLocation $location = null,
+        public ?ReplyFlow $flow = null,
     ) {}
 
     public static function of(string ...$messages): self
@@ -68,16 +69,22 @@ final readonly class WhatsappReply
 
     public function withMenu(?ReplyMenu $menu): self
     {
-        return new self($this->messages, $this->button, $menu, $this->documents, $this->location);
+        return new self($this->messages, $this->button, $menu, $this->documents, $this->location, $this->flow);
     }
 
     /**
-     * The bodies to send, each paired with the button that rides on it — the
-     * last answer body with $button, the menu (if any) with its own, everything
-     * else with none. The one place this pairing is worked out, so producing a
-     * reply never has to restate it.
+     * The bodies to send, each paired with the button that rides on it and the
+     * form that opens from it — the last answer body with $button or $flow,
+     * the menu (if any) with its own button, everything else with neither. The
+     * one place this pairing is worked out, so producing a reply never has to
+     * restate it.
      *
-     * @return array<int, array{0: string, 1: ?ReplyButton}>
+     * A body carries a button or a form, never both: WhatsApp draws a Flow's
+     * call to action as the whole of the message's action, with no room beside
+     * it. Where a reply has both, the form is what the reader is being asked
+     * to do.
+     *
+     * @return array<int, array{0: string, 1: ?ReplyButton, 2: ?ReplyFlow}>
      */
     public function outbound(): array
     {
@@ -86,11 +93,13 @@ final readonly class WhatsappReply
         $pairs = [];
 
         foreach ($this->messages as $i => $message) {
-            $pairs[] = [$message, $i === $last ? $this->button : null];
+            $pairs[] = $i === $last
+                ? [$message, $this->flow === null ? $this->button : null, $this->flow]
+                : [$message, null, null];
         }
 
         if ($this->menu !== null) {
-            $pairs[] = [$this->menu->body, $this->menu->button];
+            $pairs[] = [$this->menu->body, $this->menu->button, null];
         }
 
         return $pairs;

@@ -2,6 +2,8 @@
 
 namespace App\Contracts;
 
+use App\DataObjects\ReplyFlow;
+
 interface WhatsappSender
 {
     /**
@@ -36,6 +38,20 @@ interface WhatsappSender
      * @param  array<int, array{id: string, title: string, description?: string}>  $rows
      */
     public function sendWithList(string $to, string $body, string $label, array $rows): void;
+
+    /**
+     * Deliver a message whose action opens a form inside WhatsApp.
+     *
+     * The form itself is published at Meta and referenced by id, so what goes
+     * out per message is only which form, which screen, and what to start it
+     * filled in with. Nothing else can ride on the message: a Flow's call to
+     * action is the only tappable thing on it, so whatever else is on offer
+     * has to travel in a message of its own.
+     *
+     * What comes back is not a tap but a whole submission, delivered to the
+     * webhook as JSON alongside the token the message was sent with.
+     */
+    public function sendWithFlow(string $to, string $body, ReplyFlow $flow): void;
 
     /**
      * Deliver a document — a PDF, in practice — by public URL.

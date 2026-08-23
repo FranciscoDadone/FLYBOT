@@ -2,6 +2,7 @@
 
 use App\Contracts\WhatsappSender;
 use App\DataObjects\ReplyButton;
+use App\DataObjects\ReplyFlow;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -472,6 +473,35 @@ function metaPayload(string $from = '5491111111111', ?string $text = 'ezeiza', ?
  *
  * @param  array<string, mixed>  $payload
  */
+/**
+ * The webhook shape of a submitted WhatsApp form. Not a tap: everything the
+ * pilot filled in arrives as one JSON string under its own key.
+ *
+ * @param  array<string, mixed>  $response
+ */
+function metaFlowPayload(array $response, string $from = '5491111111111', string $messageId = 'wamid.FLOW'): array
+{
+    $value = ['messaging_product' => 'whatsapp', 'messages' => [[
+        'from' => $from,
+        'id' => $messageId,
+        'timestamp' => '1753920000',
+        'type' => 'interactive',
+        'interactive' => [
+            'type' => 'nfm_reply',
+            'nfm_reply' => [
+                'name' => 'flow',
+                'body' => 'Sent',
+                'response_json' => (string) json_encode($response),
+            ],
+        ],
+    ]]];
+
+    return [
+        'object' => 'whatsapp_business_account',
+        'entry' => [['id' => '1357575039812140', 'changes' => [['field' => 'messages', 'value' => $value]]]],
+    ];
+}
+
 function postSigned(array $payload): TestResponse
 {
     $body = (string) json_encode($payload);
@@ -507,6 +537,11 @@ function rejectingSender(int $errorCode): WhatsappSender
         }
 
         public function sendWithList(string $to, string $body, string $label, array $rows): void
+        {
+            $this->reject();
+        }
+
+        public function sendWithFlow(string $to, string $body, ReplyFlow $flow): void
         {
             $this->reject();
         }

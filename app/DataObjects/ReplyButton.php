@@ -208,6 +208,13 @@ final readonly class ReplyButton
             ['Y', 'IFR y después VFR', 'Sale por instrumentos y cambia a visual'],
             ['Z', 'VFR y después IFR', 'Sale visual y cambia a instrumentos'],
         ],
+        'typeOfFlight' => [
+            ['G', 'Aviación general', 'Vuelo privado, de instrucción o de trabajo aéreo'],
+            ['S', 'Regular', 'Servicio de transporte aéreo regular'],
+            ['N', 'No regular', 'Transporte aéreo no regular'],
+            ['M', 'Militar', 'Militar, de aduana o de policía'],
+            ['X', 'Otro', 'Cualquier otra cosa'],
+        ],
         'wakeTurbulenceCat' => [
             ['L', 'L — Liviana', 'Hasta 7 toneladas de peso máximo de despegue'],
             ['M', 'M — Media', 'Entre 7 y 136 toneladas'],
@@ -254,6 +261,21 @@ final readonly class ReplyButton
         ];
 
         return new self(array_slice($rows, 0, self::MAX_LIST_ROWS), '📋 Ver opciones');
+    }
+
+    /**
+     * The options for one box as the table holds them -- code, caption,
+     * explanation -- for a renderer that is not a list sheet.
+     *
+     * The flow form draws the same four boxes as dropdowns, and reading them
+     * from here rather than restating them is what stops the chat and the form
+     * from offering a pilot two different sets of letters for item 10.
+     *
+     * @return array<int, array{0: string, 1: string, 2: string}>
+     */
+    public static function flightPlanOptions(string $field): array
+    {
+        return self::FLIGHT_PLAN_CHOICES[$field] ?? [];
     }
 
     /**

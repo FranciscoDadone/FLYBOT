@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed> $data
  * @property array<int, string>|null $auto
  * @property array<int, string>|null $asked
+ * @property string|null $flow_token
  * @property int|null $source_plan_id
  * @property Carbon $expires_at
  */
@@ -37,6 +38,7 @@ class FlightPlanDraft extends Model
         'data',
         'auto',
         'asked',
+        'flow_token',
         'source_plan_id',
         'expires_at',
     ];

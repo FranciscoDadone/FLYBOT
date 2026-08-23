@@ -125,25 +125,44 @@ final readonly class FlightPlanFields
      *
      * The whole mechanism of correcting a draft in passing. A null in $other
      * means the message said nothing about that box and it keeps what it had;
-     * CLEAR means the message emptied it on purpose. There is no third case,
-     * which is why an extractor is allowed to return a mostly-null object and
-     * still be useful.
+     * anything else is what the message said, CLEAR included.
+     *
+     * CLEAR survives a merge rather than being turned into null here, and that
+     * is the point: one message is read several times over -- the model, then
+     * the patterns, then the places, then the clock -- and each reading is
+     * merged onto the last. A sentinel that resolved on the way through would
+     * be gone by the second of them, and "sin alternativa" would arrive at the
+     * draft as silence, which means "leave it as it was". Emptying happens
+     * once, in resolved(), where the plan is written down.
      */
     public function merge(self $other): self
     {
         $merged = [];
 
         foreach ($other->toArray() as $key => $value) {
-            $merged[$key] = match (true) {
-                $value === null => $this->{$key},
-                $value === self::CLEAR => null,
-                default => $other->{$key},
-            };
+            $merged[$key] = $value === null ? $this->{$key} : $value;
         }
 
         $merged['departureAt'] = $other->departureAt ?? $this->departureAt;
 
         return new self(...$merged);
+    }
+
+    /**
+     * This plan with every box somebody emptied on purpose actually empty.
+     *
+     * The last step before a plan is stored, and the only place the sentinel
+     * stops being a value and becomes an absence.
+     */
+    public function resolved(): self
+    {
+        $values = [];
+
+        foreach ($this->toArray() as $key => $value) {
+            $values[$key] = $value === self::CLEAR ? null : $value;
+        }
+
+        return new self(...$values, departureAt: $this->departureAt);
     }
 
     /**
@@ -155,7 +174,9 @@ final readonly class FlightPlanFields
     {
         return array_values(array_filter(
             self::REQUIRED,
-            fn (string $field) => $this->{$field} === null || $this->{$field} === '',
+            fn (string $field) => $this->{$field} === null
+                || $this->{$field} === ''
+                || $this->{$field} === self::CLEAR,
         ));
     }
 
