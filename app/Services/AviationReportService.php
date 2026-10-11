@@ -178,22 +178,23 @@ abstract class AviationReportService
     }
 
     /**
-     * The sources worth trying right now.
+     * Every source, those not cooling down first.
      *
-     * If every source is cooling down we try them all anyway: a stale cooldown
-     * must never be the reason nobody gets an answer, and the alternative is
-     * failing without having asked anyone.
+     * The resting ones still come last rather than not at all: a cooldown must
+     * never be the reason nobody gets an answer. Leaving them out meant that
+     * with the SMN resting, one NOAA hiccup was an error for the user — even
+     * when the SMN had long since recovered and would have answered.
      *
      * @return array<int, AviationReportSource>
      */
     protected function available(): array
     {
-        $ready = array_values(array_filter(
-            $this->sources,
-            fn (AviationReportSource $source) => ! $this->isCoolingDown($source),
-        ));
+        $resting = array_filter($this->sources, $this->isCoolingDown(...));
 
-        return $ready === [] ? $this->sources : $ready;
+        return [
+            ...array_diff_key($this->sources, $resting),
+            ...$resting,
+        ];
     }
 
     protected function isCoolingDown(AviationReportSource $source): bool

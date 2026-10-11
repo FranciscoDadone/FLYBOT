@@ -280,6 +280,18 @@ it('ignores the cooldowns when every source is resting', function () {
 });
 
 /**
+ * With the SMN resting, a NOAA failure used to be the end of it — even when the
+ * SMN had recovered and answered the very next message.
+ */
+it('falls back to a resting source when the others fail', function () {
+    Cache::put('weather:cooldown:smn', true, 900);
+
+    fakeMetar(Http::response(smnFixture('metar-saez.html')), Http::response('down', 503));
+
+    expect(metarService()->getMetars('SAEZ')[0]->source)->toBe('smn');
+});
+
+/**
  * The cache is the actual defence against the rate limiting in front of the
  * SMN, not the retry loop — so it matters that it works.
  */
