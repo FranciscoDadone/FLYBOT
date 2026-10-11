@@ -646,6 +646,14 @@ esté mirando:
 php artisan metar:watch
 ```
 
+### La invitación a compartir
+
+En la quinta consulta respondida que nombra un aeródromo, el bot agrega un
+mensaje aparte pidiendo que lo pasen al aeroclub, con el enlace `wa.me` de
+`WHATSAPP_NUMBER`. Lo hace una sola vez por número: la cuenta sale del registro
+de mensajes, así que no hace falta guardar nada más. No va después de una
+disculpa ni cuando falta el número.
+
 ### Los botones
 
 Van dentro del mismo pedido que el texto (`ReplyButton` → mensaje `interactive`

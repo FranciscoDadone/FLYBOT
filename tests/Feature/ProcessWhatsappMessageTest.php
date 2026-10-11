@@ -1,6 +1,7 @@
 <?php
 
 use App\Contracts\WhatsappSender;
+use App\DataObjects\ReplyContext;
 use App\Jobs\ProcessWhatsappMessage;
 use App\Models\WhatsappMessage;
 use App\Services\WhatsappBotService;
@@ -194,4 +195,86 @@ it('logs the captions of the files it sent', function () {
         ->handle(app(WhatsappBotService::class), $this->sender);
 
     expect($log->fresh()->reply[0])->toContain('VOR RWY 19');
+});
+
+function answeredConsultations(string $phone, int $count): void
+{
+    foreach (range(1, $count) as $i) {
+        WhatsappMessage::create([
+            'phone' => $phone,
+            'body' => 'metar EZE',
+            'anac_code' => 'EZE',
+            'status' => WhatsappMessage::STATUS_ANSWERED,
+        ]);
+    }
+}
+
+function consultFrom(string $phone, string $body): WhatsappMessage
+{
+    $log = WhatsappMessage::create(['phone' => $phone, 'body' => $body]);
+
+    (new ProcessWhatsappMessage($phone, $body, null, null, $log))
+        ->handle(app(WhatsappBotService::class), test()->sender);
+
+    return $log;
+}
+
+it('asks to be shared once the consultation count reaches the threshold', function () {
+    config(['services.whatsapp.number' => '5491167620584']);
+    answeredConsultations('whatsapp:+5491111111111', ProcessWhatsappMessage::SHARE_AFTER - 1);
+
+    $log = consultFrom('whatsapp:+5491111111111', 'notams aeroparque');
+
+    expect(last($this->sender->bodies()))->toContain('aeroclub')->toContain('https://wa.me/5491167620584')
+        ->and(last($log->fresh()->reply))->toContain('aeroclub');
+});
+
+it('does not ask again after the threshold', function () {
+    config(['services.whatsapp.number' => '5491167620584']);
+    answeredConsultations('whatsapp:+5491111111111', ProcessWhatsappMessage::SHARE_AFTER);
+
+    consultFrom('whatsapp:+5491111111111', 'notams aeroparque');
+
+    expect(implode("\n", $this->sender->bodies()))->not->toContain('aeroclub');
+});
+
+it('does not ask before the threshold', function () {
+    config(['services.whatsapp.number' => '5491167620584']);
+    answeredConsultations('whatsapp:+5491111111111', ProcessWhatsappMessage::SHARE_AFTER - 2);
+
+    consultFrom('whatsapp:+5491111111111', 'notams aeroparque');
+
+    expect(implode("\n", $this->sender->bodies()))->not->toContain('aeroclub');
+});
+
+it('does not count other people\'s consultations', function () {
+    config(['services.whatsapp.number' => '5491167620584']);
+    answeredConsultations('whatsapp:+5492222222222', ProcessWhatsappMessage::SHARE_AFTER - 1);
+
+    consultFrom('whatsapp:+5491111111111', 'notams aeroparque');
+
+    expect(implode("\n", $this->sender->bodies()))->not->toContain('aeroclub');
+});
+
+it('does not ask after an apology', function () {
+    config(['services.whatsapp.number' => '5491167620584']);
+    answeredConsultations('whatsapp:+5491111111111', ProcessWhatsappMessage::SHARE_AFTER - 1);
+
+    $bot = Mockery::mock(WhatsappBotService::class);
+    $bot->shouldReceive('reply')->andThrow(new RuntimeException('boom'));
+    $bot->shouldReceive('lastContext')->andReturn(new ReplyContext('notam', 'EZE'));
+
+    $log = WhatsappMessage::create(['phone' => 'whatsapp:+5491111111111', 'body' => 'ezeiza']);
+    (new ProcessWhatsappMessage('whatsapp:+5491111111111', 'ezeiza', null, null, $log))->handle($bot, $this->sender);
+
+    expect($this->sender->bodies())->toHaveCount(1);
+});
+
+it('does not ask without a number to share', function () {
+    config(['services.whatsapp.number' => null]);
+    answeredConsultations('whatsapp:+5491111111111', ProcessWhatsappMessage::SHARE_AFTER - 1);
+
+    consultFrom('whatsapp:+5491111111111', 'notams aeroparque');
+
+    expect(implode("\n", $this->sender->bodies()))->not->toContain('aeroclub');
 });

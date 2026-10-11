@@ -30,6 +30,13 @@ class ProcessWhatsappMessage implements ShouldQueue
     public array $backoff = [10, 60];
 
     /**
+     * The answered consultation, counting only the ones that named an
+     * aerodrome, after which the bot asks once to be passed on. Late enough
+     * that it has been useful, and never again after that.
+     */
+    public const SHARE_AFTER = 5;
+
+    /**
      * Create a new job instance.
      */
     public function __construct(
@@ -49,6 +56,7 @@ class ProcessWhatsappMessage implements ShouldQueue
     public function handle(WhatsappBotService $bot, WhatsappSender $sender): void
     {
         $startedAt = microtime(true);
+        $failed = false;
 
         $this->indicateTyping($sender);
 
@@ -59,6 +67,7 @@ class ProcessWhatsappMessage implements ShouldQueue
             report($e);
             $this->log?->recordUnderstanding($bot->lastContext());
             $this->log?->recordFailure($e->getMessage());
+            $failed = true;
 
             // Deliberately not rethrown: if building the reply failed, a retry
             // will most likely fail the same way, and the user is better served
@@ -67,6 +76,12 @@ class ProcessWhatsappMessage implements ShouldQueue
         }
 
         $this->deliver($sender, $this->from, $reply);
+
+        $invitation = $failed ? null : $this->shareInvitation($bot->lastContext()->anacCode);
+
+        if ($invitation !== null) {
+            $sender->send($this->from, $invitation);
+        }
 
         // In the order they went out, attachments first — a reply that is only
         // PDFs, or only a pin, would otherwise leave an answered row with
@@ -77,7 +92,36 @@ class ProcessWhatsappMessage implements ShouldQueue
                 "📍 {$reply->location->name} ({$reply->location->latitude}, {$reply->location->longitude})",
             ]),
             ...array_column($reply->outbound(), 0),
+            ...($invitation === null ? [] : [$invitation]),
         ], $startedAt);
+    }
+
+    /**
+     * Counted from the log, so a test endpoint call without a row never asks,
+     * and a retry of this same message finds its own row still unanswered.
+     */
+    protected function shareInvitation(?string $anacCode): ?string
+    {
+        $number = config('services.whatsapp.number');
+
+        if ($this->log === null || $anacCode === null || blank($number)) {
+            return null;
+        }
+
+        $earlier = WhatsappMessage::query()
+            ->where('phone', $this->from)
+            ->whereNotNull('anac_code')
+            ->whereKeyNot($this->log->getKey())
+            ->answered()
+            ->count();
+
+        if ($earlier !== self::SHARE_AFTER - 1) {
+            return null;
+        }
+
+        return "¿Te está sirviendo FlyBot? 🙌\n\n"
+            ."Pasáselo a tu aeroclub o a quien vuele con vos: es gratis, sin registro y sin app.\n"
+            ."https://wa.me/{$number}";
     }
 
     /**
