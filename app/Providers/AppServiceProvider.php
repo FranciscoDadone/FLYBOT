@@ -86,6 +86,13 @@ class AppServiceProvider extends ServiceProvider
         // a legitimate client would ever need.
         RateLimiter::for('notams', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
 
+        // The same budget, behind a page anyone can type into: a person
+        // chatting sends a few messages a minute, never twenty.
+        RateLimiter::for('chat', fn (Request $request) => [
+            Limit::perMinute(20)->by($request->ip()),
+            Limit::perDay(300)->by($request->ip()),
+        ]);
+
         // Satisfies opcodesio/log-viewer's own production check; the actual
         // gate is the `admin` middleware already in front of /logs.
         Gate::define('viewLogViewer', fn (User $user) => $user->is_admin === true);

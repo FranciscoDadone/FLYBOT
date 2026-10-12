@@ -50,6 +50,13 @@
     escribís.
   </p>
 
+  <p class="mt-4 text-muted">
+    Si le escribís desde el <span class="font-medium text-body">chat de esta página</span>, se
+    guarda lo mismo, salvo que en lugar del número queda un identificador al azar que dura
+    mientras dure la sesión de tu navegador. No hay nombre de perfil ni suscripciones:
+    las alertas sólo funcionan por WhatsApp.
+  </p>
+
   <h2 class="mt-12 text-[1.35rem] font-semibold tracking-[-0.01em]">Para qué se usa</h2>
 
   <ul class="mt-4 grid gap-2.5 text-muted">

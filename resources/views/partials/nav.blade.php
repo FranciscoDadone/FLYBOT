@@ -12,7 +12,8 @@
       FlyBot
     </a>
     <div class="hidden gap-7 text-[0.95rem] text-muted lg:flex">
-      <a href="{{ $home }}#empezar" class="hover:text-body">Cómo empezar</a>
+      <a href="{{ $home }}#chat" class="hover:text-body">Probalo</a>
+      <a href="{{ $home }}#whatsapp" class="hover:text-body">WhatsApp</a>
       <a href="{{ $home }}#que-hace" class="hover:text-body">Qué le pedís</a>
       <a href="{{ $home }}#decodifica" class="hover:text-body">Qué recibís</a>
       <a href="{{ $home }}#alertas" class="hover:text-body">Alertas</a>

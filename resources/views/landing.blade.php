@@ -12,16 +12,17 @@
 <meta property="og:image" content="{{ url('/images/flybot-og.jpg') }}">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/images/flybot-touch.png">
-@vite('resources/css/app.css')
+<meta name="csrf-token" content="{{ csrf_token() }}">
+@vite(['resources/css/app.css', 'resources/js/chat.js'])
 </head>
 <body>
 
 @include('partials.nav')
 
-<header id="top" class="py-14 sm:py-20">
-  <div class="mx-auto grid w-full max-w-[1120px] grid-cols-1 items-start gap-12 px-6 lg:grid-cols-[1fr_360px] lg:gap-16">
-    <div>
-      <div class="flex flex-wrap items-center gap-2.5">
+<header id="top" class="pt-5 pb-14 sm:pt-8 sm:pb-20 lg:pt-6">
+  <div class="mx-auto grid w-full max-w-[1120px] items-center gap-6 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(0,620px)] xl:gap-12">
+    <div class="text-center lg:text-left">
+      <div class="flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
         <span class="inline-flex items-center rounded-lg border border-air/25 bg-air-soft px-3 py-1.5 font-mono text-xs font-medium tracking-[0.1em] text-air uppercase">
           Tu asistente aeronáutico · Argentina
         </span>
@@ -30,113 +31,135 @@
         </span>
       </div>
 
-      <h1 class="mt-6 mb-5 text-[clamp(2.1rem,4.3vw,3.1rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
-        NOTAM, METAR y TAF de los aeródromos argentinos,
-        <span class="text-air">en español</span> y por WhatsApp.
+      <h1 class="mx-auto mt-5 mb-3 max-w-[22em] text-[clamp(1.6rem,3.4vw,2.7rem)] font-semibold leading-[1.1] tracking-[-0.03em] lg:mx-0 lg:text-[2.1rem] xl:text-[2.7rem]">
+        NOTAM, METAR y TAF de los aeródromos argentinos, <span class="text-air">en español</span>.
       </h1>
 
-      <p class="max-w-[34em] text-[clamp(1.08rem,1.6vw,1.25rem)] leading-relaxed text-muted">
-        Escribí <b class="font-semibold text-body">«EZE»</b> y recibí, gratis y sin límite de
-        consultas, los NOTAM activos, el estado del tiempo y el pronóstico de cualquier
-        aeródromo de Argentina — decodificados a español legible, con el texto crudo siempre
-        a la vista.
+      <p class="mx-auto max-w-[30em] text-[clamp(1rem,1.5vw,1.15rem)] leading-relaxed text-muted lg:mx-0">
+        Preguntale acá mismo, como en WhatsApp: el mismo bot, las mismas respuestas.
       </p>
 
-      <div id="empezar" class="mt-9 max-w-[580px] rounded-2xl border border-line bg-panel p-6 sm:p-8">
-        <div class="mb-6 flex items-baseline justify-between gap-4">
-          <h2 class="text-xl font-semibold tracking-[-0.015em]">Empezá en 30 segundos</h2>
-          <span class="hidden font-mono text-xs text-dim sm:block">gratis · sin registro · sin app</span>
-        </div>
-
-        <ol class="grid gap-5">
-          <li class="grid grid-cols-[28px_1fr] items-start gap-4">
-            <span class="grid size-7 place-items-center rounded-lg border border-line bg-ink font-mono text-sm font-medium text-air">1</span>
-            <p class="text-muted">
-              Abrí el chat con
-              <span class="rounded-md border border-line bg-ink px-2 py-0.5 font-mono text-[0.92em] font-medium whitespace-nowrap text-body">{{ $number ? '+'.$number : 'el bot' }}</span>
-              desde el botón de acá abajo, o guardá el número en tu agenda.
-            </p>
-          </li>
-          <li class="grid grid-cols-[28px_1fr] items-start gap-4">
-            <span class="grid size-7 place-items-center rounded-lg border border-line bg-ink font-mono text-sm font-medium text-air">2</span>
-            <p class="text-muted">
-              Escribí el aeródromo: <strong class="font-semibold text-body">«EZE»</strong>,
-              <strong class="font-semibold text-body">«SAEZ»</strong>,
-              <strong class="font-semibold text-body">«Ezeiza»</strong> o directamente
-              <strong class="font-semibold text-body">«¿hay notams en Aeroparque?»</strong>.
-            </p>
-          </li>
-          <li class="grid grid-cols-[28px_1fr] items-start gap-4">
-            <span class="grid size-7 place-items-center rounded-lg border border-line bg-ink font-mono text-sm font-medium text-air">3</span>
-            <p class="text-muted">
-              ¿Querés el clima? <strong class="font-semibold text-body">«metar EZE»</strong>.
-              ¿El pronóstico? <strong class="font-semibold text-body">«taf EZE»</strong>.
-              ¿Que te avise si cambia? <strong class="font-semibold text-body">«avisame EZE»</strong>.
-            </p>
-          </li>
-        </ol>
-
-        <div class="mt-8 flex flex-wrap gap-3">
-          @if ($link)
-            <a href="{{ $link }}" target="_blank" rel="noopener" class="btn bg-wa text-white hover:bg-[#0b5f33]">Abrir en WhatsApp →</a>
-          @endif
-          <a href="#que-hace" class="btn border border-line bg-ink hover:bg-panel-2">Ver todo lo que responde</a>
-        </div>
-      </div>
+      <ul class="checks mt-8 hidden text-left xl:grid">
+        <li><span>Escribí como hablás: <strong>«¿va a llover mañana en Bariloche?»</strong></span></li>
+        <li><span>El texto crudo siempre arriba, la lectura en español debajo.</span></li>
+        <li><span>Sin registro y sin instalar nada. Y si querés que te avise cuando cambia el clima, <a href="#whatsapp" class="text-air hover:underline">seguilo por WhatsApp</a>.</span></li>
+      </ul>
     </div>
 
-    <div class="mx-auto w-full max-w-[360px] rounded-3xl border border-line bg-ink p-3 shadow-[0_18px_50px_-24px_rgba(15,21,27,.35)]" aria-hidden="true">
-      <div class="overflow-hidden rounded-2xl border border-line-soft">
-        <div class="flex items-center gap-3 border-b border-line bg-panel-2 px-4 py-3">
-          <img src="/images/flybot-logo-128.webp" alt="" width="34" height="34" class="size-8.5 rounded-full">
-          <div>
-            <b class="block text-[0.9rem] font-semibold tracking-[-0.01em]">FlyBot</b>
-            <small class="text-[0.75rem] font-medium text-wa">en línea</small>
+    <section id="chat" data-chat data-endpoint="{{ route('chat') }}"
+             class="relative flex h-[calc(100svh-5.5rem)] max-h-[780px] min-h-[440px] lg:h-[calc(100svh-7rem)] scroll-mt-20 flex-col overflow-hidden rounded-2xl border border-line shadow-[0_18px_50px_-24px_rgba(15,21,27,.35)]">
+      <div class="flex items-center gap-3 bg-wa-head px-4 py-2.5 text-white">
+        <img src="/images/flybot-logo-128.webp" alt="" width="40" height="40" class="size-10 rounded-full bg-white">
+        <div class="min-w-0 flex-1">
+          <b class="block text-[1rem] font-semibold tracking-[-0.01em]">FlyBot</b>
+          <small data-chat-status class="block text-[0.78rem] text-white/80" aria-live="polite">en línea</small>
+        </div>
+        @if ($link)
+          <a href="{{ $link }}" target="_blank" rel="noopener"
+             class="rounded-full border border-white/40 px-3 py-1.5 text-[0.8rem] font-medium whitespace-nowrap hover:bg-white/10">
+            Seguir en WhatsApp
+          </a>
+        @endif
+      </div>
+
+      <div data-chat-log class="chat-log flex-1" role="log" aria-live="polite">
+        <div class="mx-auto mb-2 rounded-lg bg-[#fff5c4] px-3 py-1.5 text-center text-[0.75rem] text-[#54656f] shadow-[0_1px_0.5px_rgba(11,20,26,.13)]">
+          🔒 Gratis y sin registro. Lo que escribís queda guardado para mejorar el bot — <a href="/privacidad" class="underline">privacidad</a>.
+        </div>
+        <div class="chat-row chat-row-in">
+          <div class="chat-bubble chat-bubble-in">
+            ¡Hola! Soy <strong>FlyBot</strong> ✈️<br>
+            Decime un aeródromo de Argentina —<strong>EZE</strong>, <strong>SAEZ</strong> o <strong>Ezeiza</strong>— y te paso su ficha, NOTAM, METAR, TAF y más, decodificados a español.<br><br>
+            También podés preguntar como hablás: <em>«¿hay notams en Aeroparque?»</em>, <em>«va a llover mañana en Bariloche?»</em>.
           </div>
         </div>
+      </div>
 
-        <div class="grid gap-3 bg-panel px-3.5 py-4 text-[0.82rem] leading-relaxed">
-          <div class="max-w-[88%] justify-self-end rounded-xl rounded-br-sm bg-[#d7f4c8] px-3 py-2 font-medium">metar EZE</div>
+      <div data-chat-suggestions class="flex gap-2 overflow-x-auto bg-wa-wall px-3 pb-2 sm:px-6">
+        @foreach (['EZE', 'metar Aeroparque', 'taf Bariloche', 'notams Córdoba', 'viento en pista SAEZ', 'crepúsculo Santa Rosa', 'pronarea EZE'] as $suggestion)
+          <button type="button" class="chat-suggestion" data-suggestion="{{ $suggestion }}">{{ $suggestion }}</button>
+        @endforeach
+      </div>
 
-          <div class="max-w-[92%] justify-self-start rounded-xl rounded-bl-sm border border-line-soft bg-ink px-3 py-2.5">
-            <b class="font-semibold">Ministro Pistarini (SAEZ)</b>
-            <code class="raw my-2 block text-[0.7rem] leading-normal break-words">SAEZ 281700Z 03009KT 9999 BKN008 15/14 Q1009</code>
-            <b class="font-semibold">Qué dice</b>
-            <ul class="mt-1 grid gap-1 text-muted">
-              <li>• Viento del 030° (NNE) a 9 nudos.</li>
-              <li>• Visibilidad 10 km o más.</li>
-              <li>• Nubosidad rota (5 a 7 octavos) a 800 ft.</li>
-              <li>• Temperatura 15 °C, rocío 14 °C.</li>
-              <li>• Presión QNH 1009 hPa.</li>
-            </ul>
-            <span class="mt-2 block text-[0.7rem] text-dim">Fuente: Servicio Meteorológico Nacional</span>
-            <div class="mt-2.5 border-t border-line-soft pt-2.5 text-center text-[0.8rem] font-semibold text-air">Avisarme 12 h</div>
+      <form data-chat-form class="flex items-center gap-2 bg-[#f0f2f5] px-3 py-2.5">
+        <label for="chat-input" class="sr-only">Mensaje</label>
+        <input id="chat-input" type="text" maxlength="500" autocomplete="off" enterkeyhint="send"
+               placeholder="Escribí un aeródromo o una pregunta"
+               class="min-w-0 flex-1 rounded-full border border-transparent bg-ink px-4 py-2.5 text-[16px] outline-none focus:border-wa-head/40">
+        <button type="submit" aria-label="Enviar"
+                class="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-wa-head text-white transition-opacity hover:bg-[#006e5a] disabled:opacity-50">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l-.02 6.53L15 12 3.38 13.87z"/></svg>
+        </button>
+      </form>
+
+      <div data-chat-sheet hidden class="absolute inset-0 z-10 flex items-end bg-black/40">
+        <div class="max-h-[80%] w-full overflow-y-auto rounded-t-2xl bg-ink pb-2" role="dialog" aria-modal="true" aria-labelledby="chat-sheet-title">
+          <div class="sticky top-0 flex items-center gap-3 border-b border-line-soft bg-ink px-5 py-3.5">
+            <button type="button" data-sheet-close aria-label="Cerrar" class="cursor-pointer text-xl leading-none text-dim hover:text-body">×</button>
+            <b id="chat-sheet-title" data-sheet-title class="font-semibold"></b>
           </div>
-
-          <div class="max-w-[88%] justify-self-end rounded-xl rounded-br-sm bg-[#d7f4c8] px-3 py-2 font-medium">¿va a llover mañana?</div>
-
-          <div class="max-w-[92%] justify-self-start rounded-xl rounded-bl-sm border border-line-soft bg-ink px-3 py-2.5">
-            <b class="font-semibold">Pronóstico (TAF)</b>
-            <code class="raw my-2 block text-[0.7rem] leading-normal break-words">TEMPO 2808/2812 0500 FGDZ BKN005</code>
-            <ul class="mt-1 grid gap-1 text-muted">
-              <li>• Temporario el 28 entre 08:00 y 12:00 UTC…</li>
-            </ul>
-          </div>
-
-          <div class="max-w-[88%] justify-self-end rounded-xl rounded-br-sm bg-[#d7f4c8] px-3 py-2 font-medium">qué pista conviene?</div>
-
-          <div class="max-w-[92%] justify-self-start rounded-xl rounded-bl-sm border border-line-soft bg-ink px-3 py-2.5">
-            <b class="font-semibold">Viento en pista — SAEZ</b>
-            <ul class="mt-1 grid gap-1 text-muted">
-              <li>✅ RWY 35 — de frente 15 kt · cruzado 1 kt (izq)</li>
-              <li>RWY 17 — de cola 15 kt · cruzado 1 kt (izq)</li>
-            </ul>
-          </div>
+          <div data-sheet-rows></div>
         </div>
+      </div>
+    </section>
+  </div>
+</header>
+
+<section id="whatsapp" class="border-t border-line-soft py-16 sm:py-20">
+  <div class="mx-auto grid w-full max-w-[1120px] items-center gap-10 px-6 lg:grid-cols-[1fr_minmax(0,580px)] lg:gap-16">
+    <div>
+      <span class="eyebrow">También por WhatsApp</span>
+      <h2 class="sec-title mt-3 mb-4">Llevalo en el bolsillo.</h2>
+      <p class="max-w-[34em] text-lg text-muted">
+        Es el mismo bot que acabás de usar, en el chat que ya tenés abierto todo el día.
+        Por WhatsApp, además, te puede escribir solo: pedile <b class="font-semibold text-body">«avisame EZE»</b>
+        y te avisa cuando cambia el clima.
+      </p>
+    </div>
+
+    <div id="empezar" class="w-full rounded-2xl border border-line bg-panel p-6 sm:p-8">
+      <div class="mb-6 flex items-baseline justify-between gap-4">
+        <h2 class="text-xl font-semibold tracking-[-0.015em]">Empezá en 30 segundos</h2>
+        <span class="hidden font-mono text-xs text-dim sm:block">gratis · sin registro · sin app</span>
+      </div>
+
+      <ol class="grid gap-5">
+        <li class="grid grid-cols-[28px_1fr] items-start gap-4">
+          <span class="grid size-7 place-items-center rounded-lg border border-line bg-ink font-mono text-sm font-medium text-air">1</span>
+          <p class="text-muted">
+            Abrí el chat con
+            <span class="rounded-md border border-line bg-ink px-2 py-0.5 font-mono text-[0.92em] font-medium whitespace-nowrap text-body">{{ $number ? '+'.$number : 'el bot' }}</span>
+            desde el botón de acá abajo, o guardá el número en tu agenda.
+          </p>
+        </li>
+        <li class="grid grid-cols-[28px_1fr] items-start gap-4">
+          <span class="grid size-7 place-items-center rounded-lg border border-line bg-ink font-mono text-sm font-medium text-air">2</span>
+          <p class="text-muted">
+            Escribí el aeródromo: <strong class="font-semibold text-body">«EZE»</strong>,
+            <strong class="font-semibold text-body">«SAEZ»</strong>,
+            <strong class="font-semibold text-body">«Ezeiza»</strong> o directamente
+            <strong class="font-semibold text-body">«¿hay notams en Aeroparque?»</strong>.
+          </p>
+        </li>
+        <li class="grid grid-cols-[28px_1fr] items-start gap-4">
+          <span class="grid size-7 place-items-center rounded-lg border border-line bg-ink font-mono text-sm font-medium text-air">3</span>
+          <p class="text-muted">
+            ¿Querés el clima? <strong class="font-semibold text-body">«metar EZE»</strong>.
+            ¿El pronóstico? <strong class="font-semibold text-body">«taf EZE»</strong>.
+            ¿Que te avise si cambia? <strong class="font-semibold text-body">«avisame EZE»</strong>.
+          </p>
+        </li>
+      </ol>
+
+      <div class="mt-8 flex flex-wrap gap-3">
+        @if ($link)
+          <a href="{{ $link }}" target="_blank" rel="noopener" class="btn bg-wa text-white hover:bg-[#0b5f33]">Abrir en WhatsApp →</a>
+        @endif
+        <a href="#chat" class="btn border border-line bg-ink hover:bg-panel-2">Probarlo acá</a>
       </div>
     </div>
   </div>
-</header>
+</section>
 
 <section id="que-hace" class="border-t border-line-soft py-16 sm:py-24">
   <div class="mx-auto w-full max-w-[1120px] px-6">
@@ -380,14 +403,15 @@
       <img src="/images/flybot-logo.webp" alt="FlyBot" width="104" height="104" class="mx-auto mb-6 size-26">
       <h2 class="text-[clamp(1.7rem,3vw,2.2rem)] font-semibold tracking-[-0.025em]">Probalo con tu aeródromo.</h2>
       <p class="mx-auto mt-4 mb-8 max-w-[52ch] text-lg text-muted">
-        Mandale «EZE» —o cualquier aeródromo de Argentina— y ves la respuesta completa
-        en el chat. Gratis, sin registro y sin instalar nada.
+        Escribile «EZE» —o cualquier aeródromo de Argentina— y ves la respuesta completa,
+        acá o en WhatsApp. Gratis, sin registro y sin instalar nada.
       </p>
-      @if ($link)
-        <a href="{{ $link }}" target="_blank" rel="noopener" class="btn bg-wa text-white hover:bg-[#0b5f33]">Abrir en WhatsApp →</a>
-      @else
-        <p class="text-dim">Todavía no hay un número publicado para este bot.</p>
-      @endif
+      <div class="flex flex-wrap justify-center gap-3">
+        <a href="#chat" class="btn bg-wa-head text-white hover:bg-[#006e5a]">Escribirle acá ↑</a>
+        @if ($link)
+          <a href="{{ $link }}" target="_blank" rel="noopener" class="btn border border-line bg-ink hover:bg-panel-2">Abrir en WhatsApp →</a>
+        @endif
+      </div>
     </div>
   </div>
 </section>

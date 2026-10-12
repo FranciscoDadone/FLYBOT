@@ -364,9 +364,9 @@ class WhatsappBotService
         }
 
         if (in_array($topic, ['list', 'subscribe', 'unsubscribe'], true)) {
-            return $from === null
-                ? WhatsappReply::of('Las alertas sólo funcionan por WhatsApp, donde puedo escribirte cuando algo cambie.')
-                : $this->subscriptionReply($topic, $message, $from);
+            return $from !== null && $this->canBeAlerted($from)
+                ? $this->subscriptionReply($topic, $message, $from)
+                : $this->alertsOnlyOnWhatsapp();
         }
 
         // Without the topic's own words: they have already been read, and
@@ -418,6 +418,10 @@ class WhatsappBotService
      */
     protected function replyToButton(string $payload, string $from): ?WhatsappReply
     {
+        if (! $this->canBeAlerted($from) && preg_match('/^(un)?sub:/', $payload) === 1) {
+            return $this->alertsOnlyOnWhatsapp();
+        }
+
         if (preg_match(self::BUTTON_SUBSCRIBE, $payload, $m) === 1) {
             $this->context->topic = 'subscribe';
 
@@ -596,6 +600,26 @@ class WhatsappBotService
         }
 
         return false;
+    }
+
+    /**
+     * An alert is a message nobody asked for, so it can only go where we can
+     * write unprompted: a WhatsApp number. The web chat has a $from — it needs
+     * one for the menus — but nowhere to send a change to once the page closes.
+     */
+    protected function canBeAlerted(?string $from): bool
+    {
+        return $from !== null && str_starts_with($from, 'whatsapp:');
+    }
+
+    protected function alertsOnlyOnWhatsapp(): WhatsappReply
+    {
+        $number = preg_replace('/\D/', '', (string) config('services.whatsapp.number'));
+
+        return WhatsappReply::of(
+            'Las alertas sólo funcionan por WhatsApp, donde puedo escribirte cuando algo cambie.'
+            .($number === '' ? '' : "\nEscribime ahí: https://wa.me/{$number}")
+        );
     }
 
     /**
@@ -956,7 +980,7 @@ class WhatsappBotService
      */
     protected function watchOffer(string $indicator, string $icao, ?string $from, bool $hasReport): array
     {
-        if ($from === null || ! $hasReport) {
+        if (! $this->canBeAlerted($from) || ! $hasReport) {
             return [null, null];
         }
 

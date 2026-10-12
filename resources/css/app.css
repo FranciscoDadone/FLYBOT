@@ -26,6 +26,10 @@
     --color-raw-bg: #eff4f9;
     --color-raw: #10395f;
     --color-wa: #0f7a41;
+    --color-wa-head: #008069;
+    --color-wa-wall: #efeae2;
+    --color-wa-out: #d9fdd3;
+    --color-wa-link: #027eb5;
 
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
@@ -100,5 +104,146 @@
     .checks code,
     .card code {
         @apply font-mono text-[0.9em] font-semibold text-raw;
+    }
+
+    /* El chat imita a WhatsApp a propósito: es el mismo bot y responde con los
+       mismos mensajes, así que tiene que verse como lo que vas a recibir allá. */
+    .chat-log {
+        @apply flex flex-col gap-1.5 overflow-y-auto overscroll-contain bg-wa-wall px-3 py-4 sm:px-6;
+        background-image: radial-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+        background-size: 14px 14px;
+    }
+
+    .chat-row {
+        @apply flex flex-col;
+    }
+
+    .chat-row-out {
+        @apply items-end;
+    }
+
+    .chat-row-in {
+        @apply items-start;
+    }
+
+    .chat-bubble {
+        @apply relative max-w-[min(85%,560px)] rounded-lg px-2.5 pt-1.5 pb-1 text-[0.95rem] leading-[1.4] break-words shadow-[0_1px_0.5px_rgba(11,20,26,.13)];
+    }
+
+    .chat-bubble-out {
+        @apply rounded-tr-none bg-wa-out;
+    }
+
+    .chat-bubble-in {
+        @apply rounded-tl-none bg-ink;
+    }
+
+    .chat-bubble-wide {
+        @apply w-[min(85%,330px)];
+    }
+
+    .chat-bubble a {
+        @apply text-wa-link underline-offset-2 hover:underline;
+    }
+
+    .chat-code {
+        @apply my-1 block rounded bg-black/5 px-2 py-1.5 font-mono text-[0.8rem] leading-normal whitespace-pre-wrap;
+    }
+
+    .chat-inline-code {
+        @apply rounded bg-black/5 px-1 font-mono text-[0.85em];
+    }
+
+    .chat-time {
+        @apply float-right mt-1.5 ml-3 translate-y-0.5 text-[0.68rem] leading-none text-dim select-none;
+    }
+
+    .chat-ticks {
+        @apply text-[#53bdeb];
+    }
+
+    .chat-actions {
+        @apply mt-0.5 grid w-[min(85%,560px)] gap-0.5;
+    }
+
+    .chat-action {
+        @apply cursor-pointer rounded-lg bg-ink px-3 py-2 text-center text-[0.92rem] font-medium text-wa-link shadow-[0_1px_0.5px_rgba(11,20,26,.13)] transition-colors hover:bg-panel;
+    }
+
+    .chat-doc {
+        @apply -mx-1 mb-1 flex items-center gap-3 rounded-md bg-black/5 p-2.5 text-body! no-underline!;
+    }
+
+    .chat-doc-icon {
+        @apply grid h-10 w-8 shrink-0 place-items-center rounded bg-[#e2524b] font-mono text-[0.6rem] font-bold text-white;
+    }
+
+    .chat-doc-label {
+        @apply grid min-w-0;
+    }
+
+    .chat-doc-name {
+        @apply truncate text-[0.88rem] font-medium;
+    }
+
+    .chat-doc-hint {
+        @apply text-[0.75rem] text-dim;
+    }
+
+    .chat-map {
+        @apply -mx-1 mb-1 grid overflow-hidden rounded-md text-body! no-underline!;
+    }
+
+    .chat-map-art {
+        @apply grid h-28 place-items-center bg-[#dfe9d6];
+        background-image:
+            linear-gradient(90deg, rgba(255, 255, 255, 0.8) 3px, transparent 3px),
+            linear-gradient(rgba(255, 255, 255, 0.8) 3px, transparent 3px),
+            linear-gradient(35deg, transparent 46%, #f6d58a 46%, #f6d58a 52%, transparent 52%);
+        background-size: 46px 46px, 46px 46px, 100% 100%;
+    }
+
+    .chat-map-pin {
+        @apply text-3xl drop-shadow;
+    }
+
+    .chat-map-name {
+        @apply px-1 pt-2 text-[0.9rem] font-semibold;
+    }
+
+    .chat-map-address {
+        @apply px-1 text-[0.8rem] text-muted;
+    }
+
+    .chat-typing {
+        @apply flex gap-1 px-3.5 py-3;
+    }
+
+    .chat-typing span {
+        @apply size-2 animate-bounce rounded-full bg-dim/60;
+    }
+
+    .chat-typing span:nth-child(2) {
+        animation-delay: 0.15s;
+    }
+
+    .chat-typing span:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+
+    .chat-suggestion {
+        @apply shrink-0 cursor-pointer rounded-full border border-line bg-ink px-3.5 py-1.5 text-[0.85rem] whitespace-nowrap text-body transition-colors hover:border-wa-head hover:text-wa-head;
+    }
+
+    .chat-sheet-row {
+        @apply grid w-full cursor-pointer gap-0.5 border-b border-line-soft px-5 py-3 text-left transition-colors last:border-b-0 hover:bg-panel;
+    }
+
+    .chat-sheet-row b {
+        @apply text-[0.95rem] font-medium;
+    }
+
+    .chat-sheet-row span {
+        @apply text-[0.82rem] text-muted;
     }
 }

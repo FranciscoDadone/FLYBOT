@@ -135,7 +135,7 @@ La `OPENROUTER_API_KEY` es opcional: sin ella todo funciona con el
 decodificador offline.
 
 `composer setup` corre además `npm install && npm run build`, que es lo que
-compila el CSS de la landing. Sin ese paso la raíz falla al buscar el
+compila el CSS y el JS del chat de la landing. Sin ese paso la raíz falla al buscar el
 manifiesto de Vite, así que la suite también lo necesita.
 
 ### Con Docker
@@ -207,6 +207,17 @@ en el medio.
 Está escrita para quien vuela, no para quien la despliega: qué contestan los
 NOTAM, el METAR, el TAF y las alertas, y cómo escribirle al bot. Lo de acá
 abajo —la API, Docker, el bloqueo del SMN— queda fuera a propósito.
+
+Lo principal de la página es el chat (`resources/js/chat.js`), que habla con
+`POST /chat`. Es el mismo bot: `WebChatController` llama a
+`WhatsappBotService::reply()` y entrega la respuesta con el mismo `deliver()`
+que el job de WhatsApp, sólo que a un `WebChatSender` que junta los mensajes
+—textos, botones, listas, PDF y ubicaciones— en JSON en vez de mandarlos a
+Meta. Cada consulta queda en el panel como cualquier otra, con un
+`phone` de la forma `web:xxxxxxxxxxxx` que dura lo que la sesión. Las alertas
+no se ofrecen ni se activan desde ahí: no hay adónde escribir cuando cambia el
+clima con la página cerrada. Está limitado a 20 mensajes por minuto y 300 por
+día por IP, porque cada consulta puede costar llamadas al modelo.
 
 Los estilos son [Tailwind](https://tailwindcss.com) compilado por Vite
 (`resources/css/app.css`), así que hace falta `npm run build` —o `npm run dev`—

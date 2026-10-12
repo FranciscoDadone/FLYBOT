@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LoginController;
 use App\Http\Controllers\Admin\MessageController;
+use App\Http\Controllers\WebChatController;
 use App\Http\Controllers\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,10 +23,13 @@ $whatsappLink = function (): array {
 };
 
 /**
- * The landing page is the public web UI: everything else is a JSON API, a
- * WhatsApp bot and the panel behind /admin.
+ * The landing page is the public web UI — the bot itself, in a chat that answers
+ * like WhatsApp does: everything else is a JSON API, a WhatsApp bot and the
+ * panel behind /admin.
  */
 Route::get('/', fn () => view('landing', $whatsappLink()));
+
+Route::post('/chat', [WebChatController::class, 'store'])->middleware('throttle:chat')->name('chat');
 
 /**
  * Required to publish the Meta app the bot talks WhatsApp through, and worth
