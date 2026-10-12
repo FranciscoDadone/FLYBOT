@@ -67,4 +67,11 @@ interface WhatsappSender
      * @param  string  $inboundMessageId  Provider id of the message being answered (Meta: a "wamid.…").
      */
     public function indicateTyping(string $inboundMessageId): void;
+
+    /**
+     * A sender whose messages all carry $reference, which the provider hands
+     * back on every delivery receipt for them — the only way to tell which
+     * conversation a message rejected after the fact belonged to.
+     */
+    public function referencing(string $reference): static;
 }

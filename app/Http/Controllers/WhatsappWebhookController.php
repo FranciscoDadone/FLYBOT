@@ -52,7 +52,7 @@ class WhatsappWebhookController extends Controller
             $this->receive($message, $contacts);
         }
 
-        $this->logFailedDeliveries($request);
+        $this->recordFailedDeliveries($request);
 
         return response('', Response::HTTP_OK);
     }
@@ -60,24 +60,45 @@ class WhatsappWebhookController extends Controller
     /**
      * Meta answers a send with 200 and a message id before trying to deliver
      * it, so a rejection — an unpaid account, a blocked number — only ever
-     * shows up here, as a `failed` receipt. Without this the job reads as done
-     * and the user simply never hears back.
+     * shows up here, as a `failed` receipt. Without this the job reads as done,
+     * the panel says answered, and the user simply never hears back.
      */
-    protected function logFailedDeliveries(Request $request): void
+    protected function recordFailedDeliveries(Request $request): void
     {
         foreach ((array) $request->input('entry', []) as $entry) {
             foreach ((array) ($entry['changes'] ?? []) as $change) {
                 foreach ((array) ($change['value']['statuses'] ?? []) as $status) {
-                    if (($status['status'] ?? null) === 'failed') {
-                        Log::warning('WhatsApp no entregó una respuesta.', [
-                            'message_id' => $status['id'] ?? null,
-                            'recipient' => $status['recipient_id'] ?? null,
-                            'errors' => $status['errors'] ?? [],
-                        ]);
+                    if (($status['status'] ?? null) !== 'failed') {
+                        continue;
                     }
+
+                    $errors = (array) ($status['errors'] ?? []);
+
+                    Log::warning('WhatsApp no entregó una respuesta.', [
+                        'message_id' => $status['id'] ?? null,
+                        'recipient' => $status['recipient_id'] ?? null,
+                        'errors' => $errors,
+                    ]);
+
+                    WhatsappMessage::findByDeliveryReference($status['biz_opaque_callback_data'] ?? null)
+                        ?->recordFailure($this->describeErrors($errors));
                 }
             }
         }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $errors
+     */
+    protected function describeErrors(array $errors): string
+    {
+        $described = array_map(function (array $error) {
+            $detail = $error['error_data']['details'] ?? null;
+
+            return trim(($error['code'] ?? '').' '.($error['title'] ?? '').($detail ? ": {$detail}" : ''));
+        }, $errors);
+
+        return 'WhatsApp no entregó la respuesta. '.(implode(' / ', array_filter($described)) ?: 'Sin detalle.');
     }
 
     /**

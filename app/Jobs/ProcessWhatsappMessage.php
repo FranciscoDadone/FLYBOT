@@ -60,6 +60,10 @@ class ProcessWhatsappMessage implements ShouldQueue
 
         $this->indicateTyping($sender);
 
+        if ($this->log !== null) {
+            $sender = $sender->referencing($this->log->deliveryReference());
+        }
+
         try {
             $reply = $bot->reply($this->body, $this->from, $this->buttonPayload);
             $this->log?->recordUnderstanding($bot->lastContext());

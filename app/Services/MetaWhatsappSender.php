@@ -18,6 +18,16 @@ use Throwable;
  */
 class MetaWhatsappSender implements WhatsappSender
 {
+    protected ?string $reference = null;
+
+    public function referencing(string $reference): static
+    {
+        $sender = clone $this;
+        $sender->reference = $reference;
+
+        return $sender;
+    }
+
     public function send(string $to, string $body): void
     {
         $this->post([
@@ -104,7 +114,8 @@ class MetaWhatsappSender implements WhatsappSender
     public function indicateTyping(string $inboundMessageId): void
     {
         try {
-            $this->post([
+            $this->client()->post('messages', [
+                'messaging_product' => 'whatsapp',
                 'status' => 'read',
                 'message_id' => $inboundMessageId,
                 'typing_indicator' => ['type' => 'text'],
@@ -141,6 +152,7 @@ class MetaWhatsappSender implements WhatsappSender
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
             ...$payload,
+            ...($this->reference === null ? [] : ['biz_opaque_callback_data' => $this->reference]),
         ]);
     }
 

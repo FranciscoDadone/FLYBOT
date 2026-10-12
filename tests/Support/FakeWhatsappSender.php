@@ -111,6 +111,11 @@ class FakeWhatsappSender implements WhatsappSender
         $this->typing[] = $inboundMessageId;
     }
 
+    public function referencing(string $reference): static
+    {
+        return $this;
+    }
+
     /**
      * @return array<int, string>
      */

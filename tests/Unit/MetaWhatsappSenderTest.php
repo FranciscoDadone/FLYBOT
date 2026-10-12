@@ -246,3 +246,20 @@ it('only demands credentials when it actually sends', function () {
     expect(fn () => $sender->send('whatsapp:+5491122334455', 'hola'))
         ->toThrow(RuntimeException::class);
 });
+
+/**
+ * Meta echoes the reference on the delivery receipt, which is how a message
+ * rejected after the fact is traced back to the conversation it answered.
+ */
+it('attaches the reference to every message once given one', function () {
+    fakeGraph();
+
+    $plain = sender();
+    $plain->referencing('whatsapp_message:7')->send('whatsapp:+5491122334455', 'con');
+    $plain->send('whatsapp:+5491122334455', 'sin');
+
+    Http::assertSent(fn (Request $request) => $request['text']['body'] === 'con'
+        && $request['biz_opaque_callback_data'] === 'whatsapp_message:7');
+    Http::assertSent(fn (Request $request) => $request['text']['body'] === 'sin'
+        && ! isset($request['biz_opaque_callback_data']));
+});

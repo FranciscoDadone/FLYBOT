@@ -523,6 +523,11 @@ function rejectingSender(int $errorCode): WhatsappSender
 
         public function indicateTyping(string $inboundMessageId): void {}
 
+        public function referencing(string $reference): static
+        {
+            return $this;
+        }
+
         protected function reject(): void
         {
             throw new RequestException(new Illuminate\Http\Client\Response(

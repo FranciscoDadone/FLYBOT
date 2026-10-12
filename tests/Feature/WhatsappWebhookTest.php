@@ -110,6 +110,32 @@ it('logs a reply meta failed to deliver', function () {
     expect(WhatsappMessage::count())->toBe(0);
 });
 
+it('marks the message failed when meta rejects its answer', function () {
+    $message = WhatsappMessage::factory()->create(['status' => WhatsappMessage::STATUS_ANSWERED]);
+
+    postSigned([
+        'object' => 'whatsapp_business_account',
+        'entry' => [['id' => '1357575039812140', 'changes' => [['field' => 'messages', 'value' => [
+            'messaging_product' => 'whatsapp',
+            'statuses' => [[
+                'id' => 'wamid.SENT',
+                'status' => 'failed',
+                'recipient_id' => '5491111111111',
+                'biz_opaque_callback_data' => $message->deliveryReference(),
+                'errors' => [[
+                    'code' => 131042,
+                    'title' => 'Business eligibility payment issue',
+                    'error_data' => ['details' => 'Message failed to send because there were one or more errors related to your payment method.'],
+                ]],
+            ]],
+        ]]]]],
+    ])->assertOk();
+
+    $message->refresh();
+    expect($message->status)->toBe(WhatsappMessage::STATUS_FAILED)
+        ->and($message->error)->toContain('131042 Business eligibility payment issue: Message failed to send');
+});
+
 /**
  * Meta retries a webhook it considers unacknowledged. The same message arriving
  * twice must not answer the user twice.

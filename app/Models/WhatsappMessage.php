@@ -128,6 +128,24 @@ class WhatsappMessage extends Model
     }
 
     /**
+     * What every message answering this one carries, so that a rejection Meta
+     * only reports later, on the webhook, finds its way back to this row.
+     */
+    public function deliveryReference(): string
+    {
+        return "whatsapp_message:{$this->getKey()}";
+    }
+
+    public static function findByDeliveryReference(?string $reference): ?self
+    {
+        if ($reference === null || ! preg_match('/^whatsapp_message:(\d+)$/', $reference, $matches)) {
+            return null;
+        }
+
+        return self::find((int) $matches[1]);
+    }
+
+    /**
      * The number as a person would read it, without the channel prefix.
      */
     public function phoneNumber(): string
