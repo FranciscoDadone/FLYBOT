@@ -6,6 +6,7 @@ use App\Jobs\ProcessWhatsappMessage;
 use App\Models\WhatsappMessage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class WhatsappWebhookController extends Controller
@@ -51,7 +52,32 @@ class WhatsappWebhookController extends Controller
             $this->receive($message, $contacts);
         }
 
+        $this->logFailedDeliveries($request);
+
         return response('', Response::HTTP_OK);
+    }
+
+    /**
+     * Meta answers a send with 200 and a message id before trying to deliver
+     * it, so a rejection — an unpaid account, a blocked number — only ever
+     * shows up here, as a `failed` receipt. Without this the job reads as done
+     * and the user simply never hears back.
+     */
+    protected function logFailedDeliveries(Request $request): void
+    {
+        foreach ((array) $request->input('entry', []) as $entry) {
+            foreach ((array) ($entry['changes'] ?? []) as $change) {
+                foreach ((array) ($change['value']['statuses'] ?? []) as $status) {
+                    if (($status['status'] ?? null) === 'failed') {
+                        Log::warning('WhatsApp no entregó una respuesta.', [
+                            'message_id' => $status['id'] ?? null,
+                            'recipient' => $status['recipient_id'] ?? null,
+                            'errors' => $status['errors'] ?? [],
+                        ]);
+                    }
+                }
+            }
+        }
     }
 
     /**

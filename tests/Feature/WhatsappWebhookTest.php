@@ -2,6 +2,7 @@
 
 use App\Jobs\ProcessWhatsappMessage;
 use App\Models\WhatsappMessage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -84,6 +85,28 @@ it('ignores a status update', function () {
     ])->assertOk();
 
     Queue::assertNothingPushed();
+    expect(WhatsappMessage::count())->toBe(0);
+});
+
+it('logs a reply meta failed to deliver', function () {
+    Log::spy();
+
+    postSigned([
+        'object' => 'whatsapp_business_account',
+        'entry' => [['id' => '1357575039812140', 'changes' => [['field' => 'messages', 'value' => [
+            'messaging_product' => 'whatsapp',
+            'statuses' => [[
+                'id' => 'wamid.SENT',
+                'status' => 'failed',
+                'recipient_id' => '5491111111111',
+                'errors' => [['code' => 131042, 'title' => 'Business eligibility payment issue']],
+            ]],
+        ]]]]],
+    ])->assertOk();
+
+    Log::shouldHaveReceived('warning')->once()->withArgs(
+        fn (string $message, array $context) => $context['errors'][0]['code'] === 131042,
+    );
     expect(WhatsappMessage::count())->toBe(0);
 });
 
