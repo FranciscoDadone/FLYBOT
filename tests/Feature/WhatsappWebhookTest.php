@@ -191,6 +191,42 @@ it('passes a tapped list row through to the job', function () {
     });
 });
 
+/**
+ * A template's quick reply arrives as `button`, not `interactive`.
+ */
+function templateTap(string $buttonPayload, string $from = '5491111111111'): array
+{
+    $payload = metaPayload(from: $from);
+    $payload['entry'][0]['changes'][0]['value']['messages'][0] = [
+        'from' => $from, 'id' => 'wamid.TAP', 'timestamp' => '1753920000',
+        'type' => 'button', 'button' => ['payload' => $buttonPayload, 'text' => 'Reintentar'],
+    ];
+
+    return $payload;
+}
+
+it('answers the original question when reintentar is tapped', function () {
+    $original = WhatsappMessage::factory()->create(['phone' => 'whatsapp:+5491111111111', 'body' => 'VOR RWY 19', 'button_payload' => 'doc:SAZR:2']);
+
+    postSigned(templateTap("retry:{$original->id}"))->assertOk();
+
+    Queue::assertPushed(function (ProcessWhatsappMessage $job) {
+        return (new ReflectionProperty($job, 'buttonPayload'))->getValue($job) === 'doc:SAZR:2'
+            && (new ReflectionProperty($job, 'body'))->getValue($job) === 'VOR RWY 19';
+    });
+});
+
+it('does not replay somebody else\'s question', function () {
+    $original = WhatsappMessage::factory()->create(['phone' => 'whatsapp:+5492222222222', 'body' => 'metar saez']);
+
+    postSigned(templateTap("retry:{$original->id}"))->assertOk();
+
+    Queue::assertPushed(function (ProcessWhatsappMessage $job) {
+        return (new ReflectionProperty($job, 'buttonPayload'))->getValue($job) === null
+            && (new ReflectionProperty($job, 'body'))->getValue($job) === 'Reintentar';
+    });
+});
+
 it('leaves the button payload null for a typed message', function () {
     postSigned(metaPayload())->assertOk();
 

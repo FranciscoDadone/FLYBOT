@@ -264,6 +264,11 @@ return [
 
         'graph_version' => env('WHATSAPP_GRAPH_VERSION', 'v25.0'),
 
+        // Plantilla de utilidad con un botón "Reintentar", para avisar a quien
+        // no le llegó la respuesta. Tiene que estar aprobada en WhatsApp Manager.
+        'retry_template' => env('WHATSAPP_RETRY_TEMPLATE', 'consulta_no_entregada'),
+        'retry_template_language' => env('WHATSAPP_RETRY_TEMPLATE_LANGUAGE', 'es_AR'),
+
         // Sólo para probar contra un número de prueba con un móvil argentino:
         // su lista de autorizados no acepta la forma 549 que WhatsApp usa en
         // el mensaje entrante. Ver MetaWhatsappSender::recipient().

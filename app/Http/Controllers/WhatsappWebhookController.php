@@ -148,13 +148,18 @@ class WhatsappWebhookController extends Controller
         // A row of a list sheet arrives under its own key rather than
         // button_reply's, and is otherwise the same thing — same ids, same
         // grammar — so both are read into the one payload.
+        //
+        // A template's quick reply is a third shape: `button`, with payload and
+        // text instead of id and title.
         $tapped = $message['interactive']['button_reply']
             ?? $message['interactive']['list_reply']
-            ?? [];
+            ?? (isset($message['button']) ? ['id' => $message['button']['payload'] ?? '', 'title' => $message['button']['text'] ?? ''] : []);
 
         $buttonPayload = (string) ($tapped['id'] ?? '');
 
         $body = (string) ($message['text']['body'] ?? $tapped['title'] ?? '');
+
+        [$body, $buttonPayload] = $this->resolveRetry($from, $body, $buttonPayload);
 
         // Meta anchors the typing indicator to the message being answered.
         $messageId = (string) ($message['id'] ?? '');
@@ -191,6 +196,28 @@ class WhatsappWebhookController extends Controller
         }
 
         ProcessWhatsappMessage::dispatch($from, $body, $messageId ?: null, $buttonPayload ?: null, $log);
+    }
+
+    /**
+     * "Reintentar" on a SendRetryInvitation stands for the question that went
+     * unanswered, so it is answered as if that had just been asked again. Only
+     * the sender's own messages qualify; anything else reads as the caption.
+     *
+     * @return array{0: string, 1: string}
+     */
+    protected function resolveRetry(string $from, string $body, string $buttonPayload): array
+    {
+        if (preg_match('/^retry:(\d+)$/', $buttonPayload, $m) !== 1) {
+            return [$body, $buttonPayload];
+        }
+
+        $original = WhatsappMessage::query()->where('phone', $from)->find((int) $m[1]);
+
+        if ($original === null) {
+            return [$body, ''];
+        }
+
+        return [$original->body, (string) $original->button_payload];
     }
 
     /**

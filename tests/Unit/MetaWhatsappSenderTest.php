@@ -263,3 +263,20 @@ it('attaches the reference to every message once given one', function () {
     Http::assertSent(fn (Request $request) => $request['text']['body'] === 'sin'
         && ! isset($request['biz_opaque_callback_data']));
 });
+
+it('sends a template with its parameters and the quick reply payload', function () {
+    fakeGraph();
+
+    sender()->sendTemplate('whatsapp:+5491122334455', 'consulta_no_entregada', 'es_AR', ['metar saez'], 'retry:42');
+
+    Http::assertSent(function (Request $request) {
+        $template = $request['template'];
+
+        return $request['type'] === 'template'
+            && $template['name'] === 'consulta_no_entregada'
+            && $template['language']['code'] === 'es_AR'
+            && $template['components'][0]['parameters'][0]['text'] === 'metar saez'
+            && $template['components'][1]['sub_type'] === 'quick_reply'
+            && $template['components'][1]['parameters'][0]['payload'] === 'retry:42';
+    });
+});

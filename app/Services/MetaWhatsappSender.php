@@ -104,6 +104,39 @@ class MetaWhatsappSender implements WhatsappSender
     }
 
     /**
+     * The only kind of message Meta delivers outside the 24-hour window. The
+     * quick-reply payload is set per send, so a tap comes back carrying it.
+     *
+     * @param  array<int, string>  $bodyParameters
+     */
+    public function sendTemplate(string $to, string $name, string $language, array $bodyParameters, ?string $buttonPayload = null): void
+    {
+        $components = [[
+            'type' => 'body',
+            'parameters' => array_map(fn (string $text) => ['type' => 'text', 'text' => $text], array_values($bodyParameters)),
+        ]];
+
+        if ($buttonPayload !== null) {
+            $components[] = [
+                'type' => 'button',
+                'sub_type' => 'quick_reply',
+                'index' => '0',
+                'parameters' => [['type' => 'payload', 'payload' => $buttonPayload]],
+            ];
+        }
+
+        $this->post([
+            'to' => $this->recipient($to),
+            'type' => 'template',
+            'template' => [
+                'name' => $name,
+                'language' => ['code' => $language],
+                'components' => $components,
+            ],
+        ])->throw();
+    }
+
+    /**
      * The same endpoint as a message: marking the inbound message read is what
      * puts the dots up, and the two are one request.
      *
