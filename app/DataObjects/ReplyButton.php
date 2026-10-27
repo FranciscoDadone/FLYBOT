@@ -200,6 +200,22 @@ final readonly class ReplyButton
     }
 
     /**
+     * This sheet with $buttons as its first rows, for a message that has to
+     * carry both: WhatsApp draws buttons or a list, never the two at once.
+     * A button the sheet already offers is not repeated.
+     */
+    public function leadingWith(self $buttons): self
+    {
+        $rows = [];
+
+        foreach ([...$buttons->buttons, ...$this->buttons] as $row) {
+            $rows[$row['id']] ??= $row;
+        }
+
+        return new self(array_slice(array_values($rows), 0, self::MAX_LIST_ROWS), $this->listLabel);
+    }
+
+    /**
      * "The other documents this aerodrome has in the AIP" — one row each,
      * drawn as a list because there are routinely more than three.
      *

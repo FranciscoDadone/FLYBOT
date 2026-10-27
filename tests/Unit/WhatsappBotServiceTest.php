@@ -139,17 +139,40 @@ it('does not warn about aerodromes that are open', function () {
     expect(bot()->reply('notams EZE')->messages[0])->not->toContain('CLSD');
 });
 
-it('numbers each notam as its own message', function () {
+it('packs the notams into one message when they fit', function () {
     fakeAnac();
 
     $reply = bot()->reply('notams aeroparque')->messages;
 
-    // The AER fixture carries three NOTAMs.
+    // The AER fixture carries three NOTAMs, numbered within the message.
+    expect($reply)->toHaveCount(1)
+        ->and($reply[0])->not->toContain('(1/')
+        ->toContain('1. *A2187/2026*')
+        ->toContain("\n\n3. *")
+        ->toContain('Fuente: ANAC');
+});
+
+it('only starts a new message when the next notam does not fit', function () {
+    $long = str_repeat('OBST CRANE ERECTED NEAR THR RWY 13 HGT 45M AGL. ', 27);
+    $rows = implode('', array_map(fn (int $n) => <<<HTML
+        <tr>
+            <td id="place"><p>A999{$n}/2026</p><p>AEROPARQUE J. NEWBERY</p><p>(AER)</p></td>
+            <td id="info">
+                <p>Desde: 2026-07-01 10:00:00</p>
+                <p>Hasta: 2026-07-30 22:00:00</p>
+                <p>{$long}</p>
+            </td>
+        </tr>
+        HTML, [1, 2, 3]));
+
+    fakeAnac(Http::response("<table id=\"datatable\"><tbody id=\"pibdata\">{$rows}</tbody></table>"));
+
+    $reply = bot()->reply('notams aeroparque')->messages;
+
+    // About 2500 characters each once decoded: two never fit together.
     expect($reply)->toHaveCount(3)
-        ->and($reply[0])->toContain('(1/3)')->toContain('A2187/2026')
-        ->and($reply[2])->toContain('(3/3)')
-        // The source credit rides on the final message only.
-        ->and($reply[2])->toContain('Fuente: ANAC')
+        ->and($reply[0])->toContain('(1/3)')
+        ->and($reply[2])->toContain('(3/3)')->toContain('Fuente: ANAC')
         ->and($reply[0])->not->toContain('Fuente: ANAC');
 });
 
@@ -175,7 +198,7 @@ it('splits a long notam across messages without losing text', function () {
     expect(count($reply))->toBeGreaterThan(1);
 
     foreach ($reply as $message) {
-        expect(mb_strlen($message))->toBeLessThanOrEqual(1500);
+        expect(mb_strlen($message))->toBeLessThanOrEqual(4096);
     }
 
     expect(implode(' ', $reply))
@@ -347,14 +370,14 @@ it('offers notams, metar and taf in the help text', function () {
     expect($help)->toContain('NOTAM')->toContain('METAR')->toContain('TAF');
 });
 
-it('keeps every metar message within the twilio limit', function () {
+it('keeps every metar message within the whatsapp limit', function () {
     fakeAnac();
     fakeMetar(Http::response(smnFixture('metar-multi.html')));
 
     $reply = bot()->reply('metar aeroparque')->messages;
 
     foreach ($reply as $message) {
-        expect(mb_strlen($message))->toBeLessThanOrEqual(1500);
+        expect(mb_strlen($message))->toBeLessThanOrEqual(4096);
     }
 
     // All four stations survive the split.
@@ -483,14 +506,14 @@ it('says so when there is no forecast published', function () {
     expect(bot()->reply('taf eze')->messages[0])->toContain('No hay TAF publicado');
 });
 
-it('keeps every taf message within the twilio limit', function () {
+it('keeps every taf message within the whatsapp limit', function () {
     fakeAnac();
     fakeTaf(Http::response(smnFixture('taf-multi.html')));
 
     $reply = bot()->reply('taf aeroparque')->messages;
 
     foreach ($reply as $message) {
-        expect(mb_strlen($message))->toBeLessThanOrEqual(1500);
+        expect(mb_strlen($message))->toBeLessThanOrEqual(4096);
     }
 
     // All four stations survive the split.
@@ -1559,7 +1582,7 @@ it('does not shrink the answer to fit the menu', function () {
     expect($withTemplate)->toBe($withoutTemplate);
 
     foreach ($withTemplate as $message) {
-        expect(mb_strlen($message))->toBeLessThanOrEqual(1500);
+        expect(mb_strlen($message))->toBeLessThanOrEqual(4096);
     }
 });
 
@@ -2059,15 +2082,14 @@ it('sends the notams with no button of their own', function () {
     fakeAnac();
     seedAeroparqueRunways();
 
-    $outbound = bot()->reply('notams aeroparque', PHONE)->outbound();
+    $reply = bot()->reply('notams aeroparque', PHONE);
+    $outbound = $reply->outbound();
 
-    // Three NOTAM messages plus the follow-up menu, which is a message of its
-    // own and carries the runway-wind row along with the rest.
-    expect(count($outbound))->toBe(4)
-        ->and($outbound[0][1])->toBeNull()
-        ->and($outbound[1][1])->toBeNull()
-        ->and($outbound[2][1])->toBeNull()
-        ->and(buttonIds($outbound[3][1]))->toBe([
+    // The three NOTAMs fit in one message, and the follow-up menu rides on
+    // it, carrying the runway-wind row along with the rest.
+    expect($reply->button)->toBeNull()
+        ->and(count($outbound))->toBe(1)
+        ->and(buttonIds($outbound[0][1]))->toBe([
             'ask:metar:SABE',
             'pista:SABE',
             'ask:taf:SABE',
@@ -2090,7 +2112,8 @@ it('sends a notam-less reply with no button either', function () {
 
 /**
  * Carrying no button, the notices split to the plain-text budget rather than
- * the shorter one a template gets.
+ * the shorter one an interactive message gets — even with a menu to offer,
+ * which goes out on its own rather than costing the notices a message.
  */
 it('splits a long notam to the plain-text budget', function () {
     $long = str_repeat('OBST CRANE ERECTED NEAR THR RWY 13 HGT 45M AGL. ', 80);
@@ -2101,8 +2124,12 @@ it('splits a long notam to the plain-text budget', function () {
     $reply = bot()->reply('notams aeroparque', PHONE);
 
     $lengths = array_map('mb_strlen', $reply->messages);
+    $outbound = $reply->outbound();
 
-    expect(max($lengths))->toBeGreaterThan(1024)->toBeLessThanOrEqual(1600);
+    expect(max($lengths))->toBeGreaterThan(1024)->toBeLessThanOrEqual(4096)
+        ->and(end($lengths))->toBeGreaterThan(1024)
+        ->and(count($outbound))->toBe(count($lengths) + 1)
+        ->and(end($outbound)[0])->toContain('¿Querés algo más');
 });
 
 /*
@@ -2767,7 +2794,7 @@ it('sends the ficha with no actions at all off-channel', function () {
     expect(bot()->reply('osa')->button)->toBeNull();
 });
 
-it('splits a ficha that carries the button to the smaller template budget', function () {
+it('cuts only the last part of a ficha that carries the button to the interactive budget', function () {
     seedSantaRosaFicha();
     Airport::where('anac_code', 'OSA')->update([
         // OSA is delegated to the AIP, so it is aip_service_schedule the
@@ -2779,11 +2806,11 @@ it('splits a ficha that carries the button to the smaller template budget', func
 
     $reply = bot()->reply('osa', PHONE);
 
-    expect(count($reply->messages))->toBeGreaterThan(1);
+    $lengths = array_map('mb_strlen', $reply->messages);
 
-    foreach ($reply->messages as $message) {
-        expect(mb_strlen($message))->toBeLessThanOrEqual(1024);
-    }
+    expect(count($lengths))->toBeGreaterThan(1)
+        ->and(max($lengths))->toBeGreaterThan(1024)->toBeLessThanOrEqual(4096)
+        ->and(end($lengths))->toBeLessThanOrEqual(1024);
 });
 
 /*

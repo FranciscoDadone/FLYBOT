@@ -2,6 +2,8 @@
 
 use App\DataObjects\AipDocument;
 use App\DataObjects\ReplyButton;
+use App\DataObjects\ReplyMenu;
+use App\DataObjects\WhatsappReply;
 
 /**
  * WhatsappBotService::BUTTON_ASK, written out. Every row the menu emits has to
@@ -185,4 +187,33 @@ it('leaves the pin out for an aerodrome with no coordinates', function () {
 
     expect($ids)->not->toContain('ask:ubicacion:AGR')
         ->and($ids)->toContain('ask:notam:AGR');
+});
+
+/**
+ * Under a METAR of an aerodrome already watched, the button on the report is
+ * the runway offer, which the menu also carries: merged, it appears once.
+ */
+it('leads the menu with the buttons it merges, without repeating one', function () {
+    $menu = ReplyButton::menu('metar', 'SAEZ', runwayWindId: 'pista:SAEZ');
+
+    $ids = array_column($menu->leadingWith(ReplyButton::runwayWind('SAEZ'))->buttons, 'id');
+
+    expect($ids[0])->toBe('pista:SAEZ')
+        ->and(array_count_values($ids)['pista:SAEZ'])->toBe(1)
+        ->and(count($ids))->toBe(count($menu->buttons));
+});
+
+/**
+ * A message draws one list, so the menu cannot ride on one that already
+ * carries the AIP documents.
+ */
+it('sends the menu on its own after a message that already carries a list', function () {
+    $reply = WhatsappReply::ofMany(['Los demás documentos'], ReplyButton::documents(aipDocuments(['Plano de aeródromo'])))
+        ->withMenu(new ReplyMenu('¿Querés algo más?', ReplyButton::menu('carta', 'SAZR')));
+
+    $outbound = $reply->outbound();
+
+    expect($outbound)->toHaveCount(2)
+        ->and($outbound[0][1]->listLabel)->toBe('📄 Ver documentos')
+        ->and($outbound[1][0])->toBe('¿Querés algo más?');
 });

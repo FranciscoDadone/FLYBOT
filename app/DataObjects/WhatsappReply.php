@@ -6,7 +6,7 @@ namespace App\DataObjects;
  * Everything the bot wants to say in answer to one message: the files to
  * attach, the bodies to send, in order, optionally a button to offer
  * underneath, and optionally a menu offering the other topics for the same
- * aerodrome as a message of its own.
+ * aerodrome.
  *
  * The button belongs to the reply rather than to each body because it is only
  * ever attached to the last one. A long answer arrives as a numbered run of
@@ -72,27 +72,48 @@ final readonly class WhatsappReply
     }
 
     /**
+     * WhatsApp's cap on the body of a message that carries buttons or a list.
+     */
+    public const MAX_INTERACTIVE_BODY_LENGTH = 1024;
+
+    /**
      * The bodies to send, each paired with the button that rides on it — the
-     * last answer body with $button, the menu (if any) with its own, everything
-     * else with none. The one place this pairing is worked out, so producing a
-     * reply never has to restate it.
+     * last answer body with $button, everything else with none. The one place
+     * this pairing is worked out, so producing a reply never has to restate it.
+     *
+     * The menu rides on the last body too whenever it can, because every
+     * message past the free monthly allowance is billed and a menu of its own
+     * is one more. It cannot when that body is too long to carry actions or
+     * already carries a list of its own, and then it goes out after it.
      *
      * @return array<int, array{0: string, 1: ?ReplyButton}>
      */
     public function outbound(): array
     {
         $last = count($this->messages) - 1;
+        $button = $this->button;
+        $menu = $this->menu;
+
+        if ($menu !== null && $last >= 0 && $this->canCarryMenu($this->messages[$last], $button)) {
+            $button = $button === null ? $menu->button : $menu->button->leadingWith($button);
+            $menu = null;
+        }
 
         $pairs = [];
 
         foreach ($this->messages as $i => $message) {
-            $pairs[] = [$message, $i === $last ? $this->button : null];
+            $pairs[] = [$message, $i === $last ? $button : null];
         }
 
-        if ($this->menu !== null) {
-            $pairs[] = [$this->menu->body, $this->menu->button];
+        if ($menu !== null) {
+            $pairs[] = [$menu->body, $menu->button];
         }
 
         return $pairs;
+    }
+
+    protected function canCarryMenu(string $body, ?ReplyButton $button): bool
+    {
+        return mb_strlen($body) <= self::MAX_INTERACTIVE_BODY_LENGTH && $button?->listLabel === null;
     }
 }

@@ -50,19 +50,17 @@ use Illuminate\Support\Str;
 class WhatsappBotService
 {
     /**
-     * WhatsApp accepts a text body of up to 4096 characters, so this is a
-     * decision about what is readable in a chat rather than a limit imposed on
-     * us. It also leaves margin for multi-byte emoji and the "(i/N)" prefix
-     * added when a reply needs to be split into several messages.
+     * Just under WhatsApp's 4096, leaving margin for multi-byte emoji and the
+     * "(i/N)" prefix. As long as WhatsApp allows rather than as long as reads
+     * comfortably, because past the free monthly allowance every message is
+     * billed.
      */
-    protected const MAX_MESSAGE_LENGTH = 1500;
+    protected const MAX_MESSAGE_LENGTH = 4000;
 
     /**
      * A message that carries buttons is an interactive one, and WhatsApp caps
-     * its body at 1024 characters — shorter than a plain message's. When a
-     * button is going to be offered, the whole reply is split to this smaller
-     * budget rather than only its last part: predicting which part ends up last
-     * is not worth the one extra message it would occasionally save.
+     * its body at 1024 characters. Only the last part of a reply carries them,
+     * so only that part is cut to this; see pack().
      */
     protected const MAX_INTERACTIVE_BODY_LENGTH = 950;
 
@@ -883,8 +881,7 @@ class WhatsappBotService
      * button and therefore cannot be dropped on its own — this one stands
      * alone, so it is only sent when it will actually answer something. That
      * matters twice over: a button leading to "no tengo los rumbos de pista"
-     * is worse than no button, and a message carrying one is split to the
-     * smaller template budget, which would cost extra messages for nothing.
+     * is worse than no button.
      */
     protected function runwayWindOffer(string $indicator): ?ReplyButton
     {
@@ -1125,7 +1122,6 @@ class WhatsappBotService
     protected function formatRunwayWind(string $airportName, string $icao, array $runways, Metar $metar): WhatsappReply
     {
         $header = "🛬 *{$airportName}* ({$icao})";
-        $budget = self::MAX_MESSAGE_LENGTH - mb_strlen($header) - 12;
         $wind = SurfaceWind::fromMetar(MetarConditions::fromRaw($metar->raw));
 
         $lines = [
@@ -1135,9 +1131,7 @@ class WhatsappBotService
             $this->sourceCredit($metar->isRelayed()),
         ];
 
-        return WhatsappReply::ofMany(
-            $this->withHeader($header, $this->splitToFit(implode("\n", $lines), $budget)),
-        );
+        return WhatsappReply::ofMany($this->pack($header, [implode("\n", $lines)]));
     }
 
     /**
@@ -1158,7 +1152,6 @@ class WhatsappBotService
     protected function formatNearbyMetarRunwayWind(string $airportName, string $code, array $runways, Metar $metar, string $stationName): WhatsappReply
     {
         $header = "🛬 *{$airportName}* ({$code})";
-        $budget = self::MAX_MESSAGE_LENGTH - mb_strlen($header) - 12;
         $wind = SurfaceWind::fromMetar(MetarConditions::fromRaw($metar->raw));
 
         $lines = [
@@ -1170,9 +1163,7 @@ class WhatsappBotService
             $this->sourceCredit($metar->isRelayed()),
         ];
 
-        return WhatsappReply::ofMany(
-            $this->withHeader($header, $this->splitToFit(implode("\n", $lines), $budget)),
-        );
+        return WhatsappReply::ofMany($this->pack($header, [implode("\n", $lines)]));
     }
 
     /**
@@ -1190,7 +1181,6 @@ class WhatsappBotService
     protected function formatAerometRunwayWind(string $airportName, string $code, array $runways, AerometObservation $observation, string $stationName): WhatsappReply
     {
         $header = "🛬 *{$airportName}* ({$code})";
-        $budget = self::MAX_MESSAGE_LENGTH - mb_strlen($header) - 12;
 
         $lines = [
             $observation->stale
@@ -1203,9 +1193,7 @@ class WhatsappBotService
             $this->sourceCredit(false),
         ];
 
-        return WhatsappReply::ofMany(
-            $this->withHeader($header, $this->splitToFit(implode("\n", $lines), $budget)),
-        );
+        return WhatsappReply::ofMany($this->pack($header, [implode("\n", $lines)]));
     }
 
     /**
@@ -1568,13 +1556,6 @@ class WhatsappBotService
     {
         $header = ($airport->kind === 'HLP' ? '🚁' : '🛬')." *{$airport->name}*";
 
-        // A message that carries buttons is an interactive one, and WhatsApp
-        // caps those far shorter than a plain one. It bites here more than
-        // anywhere: an aerodrome with three runways and a paragraph of opening
-        // hours is a long ficha.
-        $budget = ($button === null ? self::MAX_MESSAGE_LENGTH : self::MAX_INTERACTIVE_BODY_LENGTH)
-            - mb_strlen($header) - 12;
-
         $lines = ['_'.$this->airportSubtitle($airport).'_'];
 
         if ($airport->is_closed) {
@@ -1619,7 +1600,7 @@ class WhatsappBotService
         }
 
         return WhatsappReply::ofMany(
-            $this->withHeader($header, $this->splitToFit(implode("\n", $lines), $budget)),
+            $this->pack($header, [implode("\n", $lines)], interactive: $button !== null),
             $button,
         );
     }
@@ -2194,9 +2175,8 @@ class WhatsappBotService
         $header = "🔭 *{$airportName}* ({$icao})";
         $total = count($tafs);
         $credit = $this->sourceCredit($tafs[0]->isRelayed());
-        $budget = self::MAX_MESSAGE_LENGTH - mb_strlen($header) - 12;
 
-        $parts = [];
+        $blocks = [];
 
         foreach ($tafs as $i => $taf) {
             $lines = [];
@@ -2227,12 +2207,10 @@ class WhatsappBotService
                 $lines[] = $credit;
             }
 
-            foreach ($this->splitToFit(implode("\n", $lines), $budget) as $part) {
-                $parts[] = $part;
-            }
+            $blocks[] = implode("\n", $lines);
         }
 
-        return WhatsappReply::ofMany($this->withHeader($header, $parts));
+        return WhatsappReply::ofMany($this->pack($header, $blocks));
     }
 
     /**
@@ -2274,7 +2252,6 @@ class WhatsappBotService
     protected function formatPronarea(PronareaForecast $forecast): WhatsappReply
     {
         $header = "🗺️ *PRONAREA FIR {$forecast->fir}*";
-        $budget = self::MAX_MESSAGE_LENGTH - mb_strlen($header) - 12;
 
         $lines = [];
 
@@ -2290,9 +2267,7 @@ class WhatsappBotService
         $lines[] = '';
         $lines[] = $this->sourceCredit(false);
 
-        $parts = $this->splitToFit(implode("\n", $lines), $budget);
-
-        return WhatsappReply::ofMany($this->withHeader($header, $parts));
+        return WhatsappReply::ofMany($this->pack($header, [implode("\n", $lines)]));
     }
 
     /**
@@ -2398,10 +2373,8 @@ class WhatsappBotService
 
         $header = "🌡️ *AEROMET {$stationName}*";
         $total = count($observations);
-        $budget = ($button === null ? self::MAX_MESSAGE_LENGTH : self::MAX_INTERACTIVE_BODY_LENGTH)
-            - mb_strlen($header) - 12;
 
-        $parts = [];
+        $blocks = [];
 
         foreach ($observations as $i => $observation) {
             $lines = [];
@@ -2435,12 +2408,10 @@ class WhatsappBotService
                 $lines[] = $this->sourceCredit(false);
             }
 
-            foreach ($this->splitToFit(implode("\n", $lines), $budget) as $part) {
-                $parts[] = $part;
-            }
+            $blocks[] = implode("\n", $lines);
         }
 
-        return WhatsappReply::ofMany($this->withHeader($header, $parts), $button);
+        return WhatsappReply::ofMany($this->pack($header, $blocks, interactive: $button !== null), $button);
     }
 
     /**
@@ -2766,8 +2737,8 @@ class WhatsappBotService
     }
 
     /**
-     * One WhatsApp message per observation: the report verbatim, then what it
-     * says in Spanish.
+     * Each observation as the report verbatim, then what it says in Spanish,
+     * as many to a message as fit.
      *
      * The raw METAR leads and is never dropped — it is the internationally
      * standard form a pilot can cross-check against any other source, and the
@@ -2790,10 +2761,8 @@ class WhatsappBotService
         $header = "🌦️ *{$airportName}* ({$icao})";
         $total = count($metars);
         $credit = $this->sourceCredit($metars[0]->isRelayed());
-        $budget = ($button === null ? self::MAX_MESSAGE_LENGTH : self::MAX_INTERACTIVE_BODY_LENGTH)
-            - mb_strlen($header) - 12;
 
-        $parts = [];
+        $blocks = [];
 
         foreach ($metars as $i => $metar) {
             $lines = [];
@@ -2826,12 +2795,10 @@ class WhatsappBotService
                 $lines[] = $credit;
             }
 
-            foreach ($this->splitToFit(implode("\n", $lines), $budget) as $part) {
-                $parts[] = $part;
-            }
+            $blocks[] = implode("\n", $lines);
         }
 
-        return WhatsappReply::ofMany($this->withHeader($header, $parts), $button);
+        return WhatsappReply::ofMany($this->pack($header, $blocks, interactive: $button !== null), $button);
     }
 
     /**
@@ -2884,17 +2851,16 @@ class WhatsappBotService
     }
 
     /**
-     * One WhatsApp message per NOTAM — or several, when a single NOTAM's text
-     * exceeds the per-message budget. Each carries an "(i/N)" prefix so a
-     * multi-part reply reads as a clearly numbered sequence in the chat.
+     * As many NOTAMs per message as fit — see pack(). Each message carries an
+     * "(i/N)" prefix so a multi-part reply reads as a clearly numbered sequence
+     * in the chat.
      *
      * A long NOTAM is split rather than truncated: dropping the tail of an
      * aeronautical notice would silently hide exactly the kind of detail
      * (a closure window, a contact number) the pilot needs.
      *
-     * Nothing rides on the last message: the runway-wind offer used to, and the
-     * follow-up menu already carries that row, so the reader lost nothing when
-     * it went — and the notices get the full plain-text budget back.
+     * No button of its own: the runway-wind offer used to ride here, and the
+     * follow-up menu already carries that row.
      *
      * @param  array<int, Notam>  $notams
      */
@@ -2914,11 +2880,7 @@ class WhatsappBotService
         $header = "✈️ *{$airportName}* ({$indicator})".$closedNotice;
         $total = count($notams);
 
-        // Reserve room for the header and the widest plausible "(99/99) "
-        // prefix, so the assembled message still fits once both are added.
-        $budget = self::MAX_MESSAGE_LENGTH - mb_strlen($header) - 12;
-
-        $parts = [];
+        $blocks = [];
 
         foreach ($notams as $i => $notam) {
             $vigencia = $notam->permanent
@@ -2936,12 +2898,93 @@ class WhatsappBotService
                 $lines[] = '_Fuente: ANAC Argentina_';
             }
 
-            foreach ($this->splitToFit(implode("\n", $lines), $budget) as $part) {
-                $parts[] = $part;
-            }
+            $blocks[] = implode("\n", $lines);
         }
 
-        return WhatsappReply::ofMany($this->withHeader($header, $parts));
+        return WhatsappReply::ofMany($this->pack($header, $blocks));
+    }
+
+    /**
+     * The blocks of an answer — one per NOTAM, TAF or report — as few messages
+     * as fit, each headed by withHeader(). A block only straddles two messages
+     * when it does not fit in one on its own.
+     *
+     * $interactive is for an answer with a button of its own, which has to
+     * ride on the last message and so needs it short enough to carry one. The
+     * follow-up menu does not ask for it: cutting a long last message to make
+     * room for the menu costs the message the menu would have saved, so a menu
+     * that does not fit goes out on its own instead.
+     *
+     * @param  array<int, string>  $blocks
+     * @return array<int, string>
+     */
+    protected function pack(string $header, array $blocks, bool $interactive = false): array
+    {
+        // Room for the header and the widest plausible "(99/99) " prefix.
+        $reserve = mb_strlen($header) + 12;
+        $limit = self::MAX_MESSAGE_LENGTH - $reserve;
+
+        $parts = [];
+        $current = '';
+
+        foreach ($blocks as $block) {
+            $candidate = $current === '' ? $block : $current."\n\n".$block;
+
+            if (mb_strlen($candidate) <= $limit) {
+                $current = $candidate;
+
+                continue;
+            }
+
+            if ($current !== '') {
+                $parts[] = $current;
+            }
+
+            $pieces = $this->splitToFit($block, $limit);
+            $current = array_pop($pieces);
+            array_push($parts, ...$pieces);
+        }
+
+        $parts[] = $current;
+
+        if ($interactive) {
+            array_push($parts, ...$this->splitTail(array_pop($parts), self::MAX_INTERACTIVE_BODY_LENGTH - $reserve));
+        }
+
+        return $this->withHeader($header, $parts);
+    }
+
+    /**
+     * $text as a head and a tail of at most $limit characters, cut between
+     * blocks where possible so a NOTAM is not split across the two.
+     *
+     * @return array<int, string>
+     */
+    protected function splitTail(string $text, int $limit): array
+    {
+        if (mb_strlen($text) <= $limit) {
+            return [$text];
+        }
+
+        $blocks = explode("\n\n", $text);
+        $taken = 0;
+
+        while ($taken < count($blocks) - 1
+            && mb_strlen(implode("\n\n", array_slice($blocks, -($taken + 1)))) <= $limit) {
+            $taken++;
+        }
+
+        if ($taken > 0) {
+            return [
+                implode("\n\n", array_slice($blocks, 0, -$taken)),
+                implode("\n\n", array_slice($blocks, -$taken)),
+            ];
+        }
+
+        $pieces = $this->splitToFit($text, $limit);
+        $tail = array_pop($pieces);
+
+        return [implode("\n", $pieces), $tail];
     }
 
     /**
@@ -3110,7 +3153,6 @@ class WhatsappBotService
         $enriched = $this->metarEnricher->enrich([$metar])[0] ?? $metar;
 
         $header = "⚠️ *{$name}* ({$icao}) — cambió el clima";
-        $budget = self::MAX_INTERACTIVE_BODY_LENGTH - mb_strlen($header) - 12;
 
         $lines = ['🔄 *Qué cambió*'];
 
@@ -3139,10 +3181,7 @@ class WhatsappBotService
         $lines[] = "_Alerta vigente hasta el {$expiryLabel}._";
         $lines[] = $this->sourceCredit($enriched->isRelayed());
 
-        return WhatsappReply::ofMany(
-            $this->withHeader($header, $this->splitToFit(implode("\n", $lines), $budget)),
-            $button,
-        );
+        return WhatsappReply::ofMany($this->pack($header, [implode("\n", $lines)], interactive: true), $button);
     }
 
     /**

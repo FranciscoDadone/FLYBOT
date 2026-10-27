@@ -688,9 +688,9 @@ que tiene todo esto. Sobre las respuestas mismas queda muy poco:
 El 🛬 **Viento en pista** no va bajo el METAR ni bajo los NOTAM aunque sea ahí
 donde más se pregunta: vive en la hoja de opciones, que se ofrece en todas las
 respuestas del aeródromo y no sólo en esas. Tenerlo en los dos lados era el
-mismo ofrecimiento hecho dos veces en el mismo intercambio, y encima un mensaje
-con botones se parte al presupuesto más corto (1024 caracteres en vez de los
-1500 habituales), que costaba mensajes de más por nada.
+mismo ofrecimiento hecho dos veces en el mismo intercambio, y encima la última
+parte de un mensaje con botones se corta al presupuesto más corto (1024
+caracteres en vez de los 4000 habituales), que costaba mensajes de más por nada.
 
 **Cuando el conjunto no entra en tres, WhatsApp tiene otra forma**: un botón
 que abre una hoja de hasta **diez filas**, cada una con un título de 24
@@ -706,8 +706,12 @@ Cada fila lleva el título de la AIP recortado a la parte que distingue un
 documento del de al lado — la AIP los escribe de lo general a lo específico,
 así que es el último tramo — y el título entero abajo, donde entra.
 
-**Y es lo que usa el menú de seguimiento**, que es un mensaje aparte y no más
-botones sobre la respuesta, porque un mensaje dibuja un solo juego. Ofrece los
+**Y es lo que usa el menú de seguimiento**, que viaja como hoja sobre el último
+mensaje de la respuesta. Si ese mensaje ya tenía botón (el 🔔 bajo el METAR),
+el botón pasa a ser la primera fila de la hoja, porque un mensaje dibuja un
+solo juego. Sale como mensaje aparte sólo cuando no puede ir encima: la
+respuesta pasa de 1024 caracteres, ya lleva otra hoja (los documentos de la
+AIP) o es un pin. Ofrece los
 otros temas del mismo aeródromo sin repetir el que se acaba de contestar, y son
 siete: NOTAM, METAR, TAF, cartas de la AIP, crepúsculos, la ficha y la
 ubicación. Con tres
@@ -753,6 +757,12 @@ como fila y nada más. La respuesta es un mensaje `location` de la Cloud API: un
 pin que abre en la app de mapas del lector, en vez de un par de coordenadas que
 hay que copiar a algún lado. Como sobre un pin no se dibuja nada, el menú lo
 sigue en un mensaje aparte.
+
+**Por qué encima y no aparte**: desde el 1/10/2026 Meta da 1000 mensajes de
+servicio gratis por número y por mes, y cobra cada uno de los que siguen. Un
+menú aparte era un mensaje cobrado por respuesta. Por lo mismo las respuestas
+juntan varios NOTAM, TAF o METAR en un mensaje hasta unos 4000 caracteres, en
+vez de mandar uno por mensaje (`pack()` en `WhatsappBotService`).
 
 **La ficha lleva la hoja encima en vez de que la siga**: es la respuesta por
 defecto —todo lo que el bot no puede ubicar cae ahí—, así que es donde alguien

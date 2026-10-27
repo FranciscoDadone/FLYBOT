@@ -77,8 +77,8 @@ it('records the reply, the topic and the aerodrome once the job answers', functi
         ->and($logged->topic)->toBe('notam')
         ->and($logged->anac_code)->toBe('AER')
         ->and($logged->icao_code)->toBe('SABE')
-        // Three NOTAM messages plus the follow-up menu.
-        ->and($logged->reply)->toHaveCount(4)
+        // The three NOTAMs in one message, with the menu riding on it.
+        ->and($logged->reply)->toHaveCount(1)
         ->and($logged->reply[0])->toContain('A2187/2026')
         ->and($logged->duration_ms)->toBeGreaterThanOrEqual(0);
 });

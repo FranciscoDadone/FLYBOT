@@ -17,13 +17,13 @@ beforeEach(function () {
     $this->app->instance(WhatsappSender::class, $this->sender);
 });
 
-it('sends one message per notam to the original sender', function () {
+it('sends the notams to the original sender', function () {
     (new ProcessWhatsappMessage('whatsapp:+5491111111111', 'notams aeroparque'))
         ->handle(app(WhatsappBotService::class), $this->sender);
 
-    expect($this->sender->sent)->toHaveCount(3)
-        ->and($this->sender->sent[0]['to'])->toBe('whatsapp:+5491111111111')
-        ->and($this->sender->bodies()[0])->toContain('A2187/2026');
+    expect($this->sender->attempts)->toBe(1)
+        ->and($this->sender->sentWithList[0]['to'])->toBe('whatsapp:+5491111111111')
+        ->and($this->sender->sentWithList[0]['body'])->toContain('A2187/2026');
 });
 
 it('shows the typing indicator while the reply is being built', function () {
@@ -58,7 +58,7 @@ it('still replies when the typing indicator cannot be shown', function () {
     (new ProcessWhatsappMessage('whatsapp:+5491111111111', 'notams aeroparque', 'SM123'))
         ->handle(app(WhatsappBotService::class), $sender);
 
-    expect($sender->sent)->toHaveCount(3);
+    expect($sender->attempts)->toBe(1);
 });
 
 /**
@@ -92,37 +92,35 @@ it('declares a retry policy', function () {
 });
 
 /**
- * The follow-up menu is a message of its own, sent after the answer — never
- * merged onto it, since WhatsApp renders one set of actions per message. It
- * goes out as a list sheet: there are more topics than the three a message can
- * draw as buttons.
+ * The follow-up menu rides on the answer as a list sheet rather than costing a
+ * message of its own: past the free monthly allowance every message is billed.
  */
-it('sends the menu as a list on a message of its own after the answer', function () {
+it('sends the menu as a list on the answer itself', function () {
     (new ProcessWhatsappMessage('whatsapp:+5491111111111', 'notams aeroparque'))
         ->handle(app(WhatsappBotService::class), $this->sender);
 
-    expect($this->sender->sent)->toHaveCount(3)
+    expect($this->sender->sent)->toBeEmpty()
         ->and($this->sender->sentWithButtons)->toBeEmpty()
         ->and($this->sender->sentWithList)->toHaveCount(1)
-        ->and($this->sender->sentWithList[0]['body'])->toContain('AEROPARQUE')
+        ->and($this->sender->sentWithList[0]['body'])->toContain('A2187/2026')
         ->and($this->sender->listRowIds())
         ->toBe(['ask:metar:SABE', 'ask:taf:SABE', 'ask:carta:SABE', 'ask:crepusculo:SABE', 'ask:info:SABE', 'ask:ubicacion:SABE']);
 });
 
 /**
- * Two messages, and two different shapes: the watch offer fits in buttons on
- * the report, the menu does not fit in three at all.
+ * A message draws buttons or a list, never both, so the watch offer becomes
+ * the first row of the menu's sheet rather than a second message.
  */
-it('sends the watch offer and the menu as two separate messages', function () {
+it('puts the watch offer at the top of the menu on the report', function () {
     fakeMetar();
 
     (new ProcessWhatsappMessage('whatsapp:+5491111111111', 'metar EZE'))
         ->handle(app(WhatsappBotService::class), $this->sender);
 
-    expect($this->sender->sentWithButtons)->toHaveCount(1)
-        ->and(array_column($this->sender->sentWithButtons[0]['buttons'], 'id'))
-        ->toBe(['sub:SAEZ:12'])
+    expect($this->sender->attempts)->toBe(1)
+        ->and($this->sender->sentWithButtons)->toBeEmpty()
         ->and($this->sender->sentWithList)->toHaveCount(1)
+        ->and($this->sender->listRowIds()[0])->toBe('sub:SAEZ:12')
         ->and($this->sender->listRowIds())->toContain('ask:carta:SAEZ');
 });
 
