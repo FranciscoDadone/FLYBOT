@@ -69,6 +69,33 @@ it('shows the metrics dashboard', function () {
 });
 
 /**
+ * Every body in the reply log is a message Meta counts, past the free
+ * allowance each one is billed, and the web chat never reaches WhatsApp.
+ */
+it('estimates this month\'s whatsapp spend from the reply log', function () {
+    config([
+        'services.whatsapp.free_messages_per_month' => 3,
+        'services.whatsapp.price_per_message_usd' => 0.5,
+    ]);
+
+    WhatsappMessage::factory()->create(['reply' => ['uno', 'dos']]);
+    WhatsappMessage::factory()->create(['reply' => ['tres', 'cuatro', 'cinco']]);
+    WhatsappMessage::factory()->create(['phone' => 'web:abc', 'reply' => ['web']]);
+    WhatsappMessage::factory()->create(['reply' => ['mes pasado'], 'created_at' => now('UTC')->startOfMonth()->subSecond()]);
+
+    expect(app(AdminMetrics::class)->whatsappSpend())->toMatchArray([
+        'sent' => 5,
+        'billable' => 2,
+        'cost' => 1.0,
+    ]);
+
+    $this->actingAs(admin())
+        ->get('/admin')
+        ->assertSee('Enviados este mes')
+        ->assertSee('USD 1,00');
+});
+
+/**
  * The two series the "Personas por día" chart stacks: someone who wrote before
  * the window counts as active but never as new, and three messages from the
  * same phone are still one person.

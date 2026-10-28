@@ -269,6 +269,12 @@ return [
         'retry_template' => env('WHATSAPP_RETRY_TEMPLATE', 'consulta_no_entregada'),
         'retry_template_language' => env('WHATSAPP_RETRY_TEMPLATE_LANGUAGE', 'es_AR'),
 
+        // Para el costo estimado del panel. Desde el 1/10/2026 Meta regala 1000
+        // mensajes de servicio por número y por mes y cobra cada uno de los que
+        // siguen; el precio es el que mostró WhatsApp Manager en oct/2026.
+        'free_messages_per_month' => (int) env('WHATSAPP_FREE_MESSAGES_PER_MONTH', 1000),
+        'price_per_message_usd' => (float) env('WHATSAPP_PRICE_PER_MESSAGE_USD', 0.0258),
+
         // Sólo para probar contra un número de prueba con un móvil argentino:
         // su lista de autorizados no acepta la forma 549 que WhatsApp usa en
         // el mensaje entrante. Ver MetaWhatsappSender::recipient().

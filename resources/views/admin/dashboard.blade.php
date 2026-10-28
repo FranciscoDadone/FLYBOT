@@ -15,7 +15,7 @@
   </p>
 </div>
 
-<section class="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:mb-10 lg:grid-cols-4">
+<section class="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:mb-10 lg:grid-cols-3">
   @include('admin.partials.stat', [
       'label' => 'Mensajes hoy',
       'value' => number_format($totals['today'], 0, ',', '.'),
@@ -35,6 +35,18 @@
       'label' => 'Respuesta (p95, 7 días)',
       'value' => $ms($latency['p95']),
       'hint' => 'Mediana '.$ms($latency['p50']).' · máx '.$ms($latency['max']),
+  ])
+  @include('admin.partials.stat', [
+      'label' => 'Enviados este mes',
+      'value' => number_format($spend['sent'], 0, ',', '.'),
+      'hint' => $spend['billable'] > 0
+          ? number_format($spend['free'], 0, ',', '.').' gratis · '.number_format($spend['billable'], 0, ',', '.').' pagos'
+          : 'Quedan '.number_format($spend['free'] - $spend['sent'], 0, ',', '.').' gratis',
+  ])
+  @include('admin.partials.stat', [
+      'label' => 'Costo del mes',
+      'value' => 'USD '.number_format($spend['cost'], 2, ',', '.'),
+      'hint' => 'Estimado, a USD '.number_format($spend['price'], 4, ',', '.').' por mensaje pago',
   ])
 </section>
 

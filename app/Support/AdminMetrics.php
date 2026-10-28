@@ -297,6 +297,41 @@ class AdminMetrics
     }
 
     /**
+     * What the bot sent this month over WhatsApp and what Meta will charge for
+     * it, as of now.
+     *
+     * Counted from the reply log, which holds every body that went out — the
+     * web chat's rows are left out, since those never touch WhatsApp. Alerts,
+     * expiry notices and the retry template are not logged there, so they are
+     * not counted either.
+     *
+     * The month is cut in UTC, which is how Meta resets the free allowance.
+     *
+     * @return array{sent: int, free: int, billable: int, cost: float, price: float}
+     */
+    public function whatsappSpend(): array
+    {
+        $sent = WhatsappMessage::query()
+            ->since(Carbon::now('UTC')->startOfMonth())
+            ->where('phone', 'not like', 'web:%')
+            ->whereNotNull('reply')
+            ->pluck('reply')
+            ->sum(fn ($reply) => count($reply ?? []));
+
+        $free = (int) config('services.whatsapp.free_messages_per_month');
+        $price = (float) config('services.whatsapp.price_per_message_usd');
+        $billable = max(0, $sent - $free);
+
+        return [
+            'sent' => $sent,
+            'free' => $free,
+            'billable' => $billable,
+            'cost' => round($billable * $price, 2),
+            'price' => $price,
+        ];
+    }
+
+    /**
      * Start of a local day, expressed as the UTC instant it began at.
      */
     protected function startOfDay(int $daysAgo = 0): Carbon

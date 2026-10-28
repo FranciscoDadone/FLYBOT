@@ -21,6 +21,7 @@ class DashboardController extends Controller
             'topics' => $metrics->topics(),
             'unmatched' => $metrics->unmatched(30),
             'latency' => $metrics->latency(7),
+            'spend' => $metrics->whatsappSpend(),
             'topUsers' => $metrics->topUsers(8),
             'subscriptions' => $metrics->subscriptions(),
             'latest' => WhatsappMessage::query()->latest('id')->limit(8)->get(),
